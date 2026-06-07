@@ -17,6 +17,7 @@ const required = new Map([
 if (db.driver === "postgres") {
   required.set("0010", "production_indexes");
 }
+required.set("0011", "growth_embed_and_ads");
 const existing = new Set(rows.map((row) => row.version));
 const missing = [...required.keys()].filter((version) => !existing.has(version));
 const nameMismatch = rows.filter((row) => required.has(row.version) && required.get(row.version) !== row.name);
@@ -45,6 +46,9 @@ const requiredColumns = {
   billing_events: ["workspace_id", "type", "payload"],
   usage_snapshots: ["workspace_id", "period", "payload"],
   tasks: ["workspace_id", "type", "status", "payload", "attempts", "locked_at"],
+  traffic_events: ["workspace_id", "source_site", "utm_campaign", "payload"],
+  ad_placements: ["workspace_id", "placement", "title", "target_url", "payload"],
+  ad_events: ["workspace_id", "placement_id", "event_type", "payload"],
 };
 
 for (const [table, columns] of Object.entries(requiredColumns)) {

@@ -236,6 +236,7 @@ async function runMigrations() {
     await recordMigration("0008", "billing_usage");
     await recordMigration("0009", "worker_task_attempts");
     await runPostgresMigrationFiles();
+    await recordMigration("0011", "growth_embed_and_ads");
     return;
   }
 
@@ -395,6 +396,43 @@ async function runMigrations() {
       payload TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS traffic_events (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL DEFAULT 'default',
+      source_site TEXT,
+      referrer TEXT,
+      utm_source TEXT,
+      utm_medium TEXT,
+      utm_campaign TEXT,
+      landing_path TEXT,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS ad_placements (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL DEFAULT 'default',
+      placement TEXT NOT NULL,
+      title TEXT NOT NULL,
+      body TEXT,
+      target_url TEXT,
+      image_url TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS ad_events (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL DEFAULT 'default',
+      placement_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      source_site TEXT,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
   `);
 
   await recordMigration("0001", "initial_sqlite_schema");
@@ -415,6 +453,7 @@ async function runMigrations() {
   await ensureColumn("tasks", "attempts", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("tasks", "locked_at", "TEXT");
   await recordMigration("0009", "worker_task_attempts");
+  await recordMigration("0011", "growth_embed_and_ads");
 }
 
 async function runPostgresMigrationFiles() {

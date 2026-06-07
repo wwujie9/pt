@@ -11,6 +11,9 @@ import {
   fetchBillingEvents,
   fetchBillingInvoices,
   fetchBillingPlans,
+  fetchGrowthMetrics,
+  fetchAdPlacements,
+  saveAdPlacement,
   createRefund,
   replayBillingWebhook,
   changeBillingPlan,
@@ -104,7 +107,7 @@ async function renderRoute() {
 
   if (hash === "#/admin") {
     view.innerHTML = `<section class="loading">正在读取来源状态...</section>`;
-    const [adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems] = await Promise.all([
+    const [adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems, growthMetrics, adPlacements] = await Promise.all([
       fetchSources().catch(() => []),
       fetchSyncLogs().catch(() => []),
       fetchReviewResources().catch(() => []),
@@ -121,8 +124,10 @@ async function renderRoute() {
       fetchDownloadClients().catch(() => []),
       fetchTasks().catch(() => []),
       fetchMediaList({ keyword: "", filters: { type: "all", genre: "all" } }).catch(() => []),
+      fetchGrowthMetrics().catch(() => null),
+      fetchAdPlacements().catch(() => []),
     ]);
-    view.innerHTML = renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems });
+    view.innerHTML = renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems, growthMetrics, adPlacements });
     bindAdminEvents();
     return;
   }
@@ -344,6 +349,28 @@ function bindAdminEvents() {
         showAdminError(error);
       }
     });
+  });
+
+  document.querySelector("#adPlacementForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      await saveAdPlacement({
+        id: data.get("id"),
+        placement: data.get("placement"),
+        title: data.get("title"),
+        body: data.get("body"),
+        targetUrl: data.get("targetUrl"),
+        imageUrl: data.get("imageUrl"),
+        enabled: data.get("enabled") === "on",
+      });
+      form.reset();
+      showToast("广告位已保存");
+      await renderRoute();
+    } catch (error) {
+      showAdminError(error);
+    }
   });
 
   document.querySelector("#monitoringRunButton")?.addEventListener("click", async () => {

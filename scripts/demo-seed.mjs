@@ -6,6 +6,7 @@ import { inviteUser } from "../server/services/auth.js";
 import { listBillingEvents, recordBillingEvent } from "../server/services/billing.js";
 import { appendSyncLog, loadSyncLogs, upsertResources } from "../server/services/store.js";
 import { runMonitoringCheck } from "../server/services/monitoring.js";
+import { upsertAdPlacement } from "../server/services/growth.js";
 
 const workspaceId = process.env.DEMO_WORKSPACE_ID || "demo-workspace";
 const workspaceName = process.env.DEMO_WORKSPACE_NAME || "Demo Customer Workspace";
@@ -30,6 +31,7 @@ await db.withWorkspaceContext(workspaceId, async () => {
   const invitation = await ensureInvitation();
   const sync = await seedFirstSync();
   const invoice = await ensureDemoInvoice();
+  const ad = await ensureDemoAdPlacement();
   const monitoring = await runMonitoringCheck();
   console.log(JSON.stringify({
     ok: true,
@@ -39,6 +41,7 @@ await db.withWorkspaceContext(workspaceId, async () => {
     invitation: { email: invitation.email, status: invitation.status, inviteToken: invitation.inviteToken },
     sync,
     invoice: { id: invoice.id, amountCents: invoice.amountCents, status: invoice.status },
+    ad: { id: ad.id, placement: ad.placement, enabled: ad.enabled },
     monitoring: { ok: monitoring.ok, alerts: monitoring.alerts.length },
     next: `http://127.0.0.1:${process.env.PORT || 4273}/#/admin`,
   }, null, 2));
@@ -52,6 +55,17 @@ async function ensureWorkspace() {
     VALUES (?, ?, 'business', TRUE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, plan = 'business', enabled = TRUE, updated_at = CURRENT_TIMESTAMP
   `).run(workspaceId, workspaceName);
+}
+
+async function ensureDemoAdPlacement() {
+  return upsertAdPlacement({
+    id: "demo-ad-free-trial",
+    placement: "catalog-sidebar",
+    title: "前 180 天免费接入影源聚合站",
+    body: "适合现有流量站点快速挂载资源榜单，先免费获客，流量起来后再开启广告营收。",
+    targetUrl: "/#/admin",
+    enabled: true,
+  }, workspaceId);
 }
 
 async function seedMedia() {

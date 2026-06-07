@@ -52,8 +52,17 @@ import {
   testDownloadClient,
   upsertDownloadClient,
 } from "../services/downloads.js";
+import {
+  growthMetrics,
+  listAdPlacements,
+  publicCatalog,
+  recordAdEvent,
+  trackTraffic,
+  upsertAdPlacement,
+} from "../services/growth.js";
 
 export async function handleApi(req, res, url) {
+  if (req.method === "OPTIONS") return corsJson(res, 204, {});
   const authContext = await db.withRlsBypass(() => getAuthContext(req));
   const workspaceId = currentWorkspaceId(req, authContext);
   const authError = requireAuthenticated(req, url, authContext);
@@ -83,6 +92,26 @@ export async function handleApi(req, res, url) {
 }
 
 async function handleApiWithContext(req, res, url, authContext, workspaceId) {
+  if (req.method === "GET" && url.pathname === "/api/public/catalog") {
+    const publicWorkspaceId = url.searchParams.get("workspaceId") || workspaceId;
+    return db.withWorkspaceContext(publicWorkspaceId, async () => corsJson(res, 200, await publicCatalog({
+      workspaceId: publicWorkspaceId,
+      limit: url.searchParams.get("limit") || 6,
+    })));
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/growth/visit") {
+    const body = await readJsonBody(req);
+    const publicWorkspaceId = body.workspaceId || workspaceId;
+    return db.withWorkspaceContext(publicWorkspaceId, async () => corsJson(res, 200, await trackTraffic(body)));
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/public/ads/events") {
+    const body = await readJsonBody(req);
+    const publicWorkspaceId = body.workspaceId || workspaceId;
+    return db.withWorkspaceContext(publicWorkspaceId, async () => corsJson(res, 200, await recordAdEvent(body)));
+  }
+
   if (req.method === "GET" && url.pathname === "/api/stats") {
     return json(res, 200, await getStats(workspaceId));
   }
@@ -190,6 +219,31 @@ async function handleApiWithContext(req, res, url, authContext, workspaceId) {
 
   if (req.method === "GET" && url.pathname === "/api/billing/invoices") {
     return json(res, 200, await listInvoices(workspaceId));
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/growth/metrics") {
+    return json(res, 200, await growthMetrics(workspaceId));
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/ads/placements") {
+    return json(res, 200, await listAdPlacements(workspaceId));
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/ads/placements") {
+    try {
+      const placement = await upsertAdPlacement(await readJsonBody(req), workspaceId);
+      await appendAuditLog({
+        actor: authContext.user,
+        workspaceId,
+        action: "ads.upsert",
+        targetType: "ad_placement",
+        targetId: placement.id,
+        payload: placement,
+      });
+      return json(res, 200, placement);
+    } catch (error) {
+      return badRequest(res, error.message);
+    }
   }
 
   if (req.method === "POST" && url.pathname === "/api/billing/checkout") {
@@ -643,6 +697,8 @@ function needsAdmin(req, url) {
     || url.pathname === "/api/workspaces"
     || url.pathname === "/api/invitations"
     || url.pathname === "/api/audit-logs"
+    || url.pathname === "/api/growth/metrics"
+    || url.pathname.startsWith("/api/ads/")
     || url.pathname === "/api/monitoring"
     || url.pathname.startsWith("/api/jobs")
     || url.pathname.startsWith("/api/download-clients")
@@ -693,6 +749,8 @@ function currentWorkspaceId(req, authContext) {
 }
 
 function shouldValidateWorkspace(req, url) {
+  if (url.pathname.startsWith("/api/public/")) return false;
+  if (url.pathname === "/api/growth/visit") return false;
   if (url.pathname.startsWith("/api/auth/")) return false;
   if (url.pathname === "/api/invitations/accept") return false;
   if (url.pathname.startsWith("/api/billing/webhooks/")) return false;
@@ -702,6 +760,8 @@ function shouldValidateWorkspace(req, url) {
 }
 
 function requireAuthenticated(req, url, authContext) {
+  if (url.pathname.startsWith("/api/public/")) return null;
+  if (url.pathname === "/api/growth/visit") return null;
   if (process.env.ALLOW_INSECURE_DEV === "1") return null;
   if (process.env.REQUIRE_AUTH !== "1") return null;
   if (authContext.user || authContext.isAdminToken) return null;
@@ -711,4 +771,12 @@ function requireAuthenticated(req, url, authContext) {
   if (url.pathname.startsWith("/api/billing/webhooks/")) return null;
   if (url.pathname === "/api/health") return null;
   return { error: "需要登录" };
+}
+
+function corsJson(res, status, payload) {
+  res.setHeader("access-control-allow-origin", "*");
+  res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  res.setHeader("access-control-allow-headers", "content-type");
+  res.setHeader("cross-origin-resource-policy", "cross-origin");
+  return json(res, status, payload);
 }

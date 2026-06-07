@@ -72,6 +72,7 @@
 - 客户首次使用向导：创建 workspace、邀请成员、添加来源、测试来源、首次同步、查看监控。
 - 管理页运营控制台：监控健康、备份新鲜度、任务总量、发票、退款、webhook 重放。
 - 免费获客商业策略：前 180 天免费、广告营收开关、广告位与活跃租户阈值配置。
+- 现有流量站点嵌入：公开 `embed.js`、UTM 归因、来源站点统计、广告展示/点击统计。
 - Redis 多实例共享限流。
 - Trivy 镜像安全扫描与 Dependabot。
 
@@ -223,6 +224,38 @@ npm run backup:lifecycle
 6. 选择一部媒体执行首次同步，查看同步日志和低置信度审核。
 7. 点击“运行监控检查”，展示备份、任务、来源健康和告警状态。
 8. 切到支付运营区，展示发票、退款记录和 webhook 重放能力。
+9. 切到“流量归因 / 广告位配置”，复制 `embed.js` 到现有流量站点，展示访问归因、广告展示和点击统计。
+
+## 现有流量站点接入
+
+把下面脚本放到已有站点的资源页、榜单页或专题页即可嵌入资源榜单：
+
+```html
+<script src="http://127.0.0.1:4273/embed.js?workspaceId=demo-workspace&limit=6&utm_campaign=existing-traffic"></script>
+```
+
+嵌入脚本会自动：
+
+- 读取公开目录摘要：`GET /api/public/catalog`
+- 记录外部访问归因：`POST /api/growth/visit`
+- 记录广告展示 / 点击：`POST /api/public/ads/events`
+- 在后台“流量归因”面板展示来源站点、campaign、展示、点击和 CTR
+
+默认广告不会强行开启：
+
+```env
+ENABLE_ADS=0
+```
+
+当免费期积累到足够活跃租户或自然流量后，再设置：
+
+```env
+ENABLE_ADS=1
+AD_PROVIDER=manual
+AD_PLACEMENT=catalog-sidebar
+```
+
+后台可以先配置广告位素材，等 `ENABLE_ADS=1` 后公开 widget 会自动带出启用广告位。
 
 反向代理模板：
 
@@ -267,6 +300,12 @@ POST /api/billing/checkout
 POST /api/billing/plan
 POST /api/billing/refunds
 POST /api/billing/webhook-replays
+GET  /api/public/catalog
+POST /api/growth/visit
+GET  /api/growth/metrics
+GET  /api/ads/placements
+POST /api/ads/placements
+POST /api/public/ads/events
 GET  /api/monitoring
 POST /api/jobs/monitoring
 GET  /api/download-clients

@@ -181,3 +181,48 @@ CREATE TABLE IF NOT EXISTS usage_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_usage_snapshots_workspace ON usage_snapshots(workspace_id, period);
+
+CREATE TABLE IF NOT EXISTS traffic_events (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  source_site TEXT,
+  referrer TEXT,
+  utm_source TEXT,
+  utm_medium TEXT,
+  utm_campaign TEXT,
+  landing_path TEXT,
+  payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_events_workspace ON traffic_events(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_traffic_events_campaign ON traffic_events(workspace_id, utm_campaign, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS ad_placements (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  placement TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  target_url TEXT,
+  image_url TEXT,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_placements_workspace ON ad_placements(workspace_id, placement);
+
+CREATE TABLE IF NOT EXISTS ad_events (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+  placement_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  source_site TEXT,
+  payload JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ad_events_workspace ON ad_events(workspace_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_ad_events_placement ON ad_events(workspace_id, placement_id, event_type);

@@ -38,6 +38,12 @@ ALTER TABLE billing_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE billing_events FORCE ROW LEVEL SECURITY;
 ALTER TABLE usage_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE usage_snapshots FORCE ROW LEVEL SECURITY;
+ALTER TABLE traffic_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE traffic_events FORCE ROW LEVEL SECURITY;
+ALTER TABLE ad_placements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ad_placements FORCE ROW LEVEL SECURITY;
+ALTER TABLE ad_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ad_events FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS tenant_media_items ON media_items;
 CREATE POLICY tenant_media_items ON media_items
@@ -96,5 +102,20 @@ CREATE POLICY tenant_billing_events ON billing_events
 
 DROP POLICY IF EXISTS tenant_usage_snapshots ON usage_snapshots;
 CREATE POLICY tenant_usage_snapshots ON usage_snapshots
+  USING (app_rls_bypass() OR workspace_id = app_current_workspace_id())
+  WITH CHECK (app_rls_bypass() OR workspace_id = app_current_workspace_id());
+
+DROP POLICY IF EXISTS tenant_traffic_events ON traffic_events;
+CREATE POLICY tenant_traffic_events ON traffic_events
+  USING (app_rls_bypass() OR workspace_id = app_current_workspace_id())
+  WITH CHECK (app_rls_bypass() OR workspace_id = app_current_workspace_id());
+
+DROP POLICY IF EXISTS tenant_ad_placements ON ad_placements;
+CREATE POLICY tenant_ad_placements ON ad_placements
+  USING (app_rls_bypass() OR workspace_id = app_current_workspace_id())
+  WITH CHECK (app_rls_bypass() OR workspace_id = app_current_workspace_id());
+
+DROP POLICY IF EXISTS tenant_ad_events ON ad_events;
+CREATE POLICY tenant_ad_events ON ad_events
   USING (app_rls_bypass() OR workspace_id = app_current_workspace_id())
   WITH CHECK (app_rls_bypass() OR workspace_id = app_current_workspace_id());

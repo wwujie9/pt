@@ -192,7 +192,7 @@ export function renderArchitecture() {
   `;
 }
 
-export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems }) {
+export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems, growthMetrics, adPlacements }) {
   const onboarding = onboardingState({ adapters, syncLogs, workspaces, invitations, monitoring });
   return `
     <section class="admin">
@@ -250,6 +250,7 @@ export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, au
         </article>
       </section>
       ${renderCommercialStrategy(billing)}
+      ${renderGrowthOps({ growthMetrics, adPlacements })}
       <div class="admin-grid">
         <section class="admin-panel">
           <div class="panel-heading">
@@ -797,6 +798,51 @@ function renderCommercialStrategy(billing) {
         <span>${escapeHtml(commercial.acquisitionMode || "free_first")} · 先用免费期换取用户与流量，后续用广告位和付费套餐变现。</span>
       </article>
     </section>
+  `;
+}
+
+function renderGrowthOps({ growthMetrics, adPlacements }) {
+  const embedCode = growthMetrics?.embed?.script
+    ? `<script src="${escapeHtml(growthMetrics.embed.script)}"></script>`
+    : "";
+  return `
+    <div class="admin-grid growth-ops">
+      <section class="admin-panel">
+        <h2>流量归因</h2>
+        <div class="growth-summary">
+          <article><strong>${growthMetrics?.visits ?? 0}</strong><span>嵌入访问</span></article>
+          <article><strong>${growthMetrics?.ads?.impressions ?? 0}</strong><span>广告展示</span></article>
+          <article><strong>${growthMetrics?.ads?.clicks ?? 0}</strong><span>广告点击</span></article>
+          <article><strong>${growthMetrics?.ads?.ctr ?? 0}%</strong><span>CTR</span></article>
+        </div>
+        <label class="embed-code-label">现有流量站点嵌入代码</label>
+        <pre class="embed-code">${escapeHtml(embedCode || "登录平台管理员后生成嵌入代码。")}</pre>
+        <div class="log-list">
+          ${(growthMetrics?.sites || []).map((site) => `<article><strong>${escapeHtml(site.sourceSite)}</strong><span>${site.visits} visits</span></article>`).join("") || `<p class="muted">暂无外部站点访问。</p>`}
+        </div>
+      </section>
+      <section class="admin-panel">
+        <h2>广告位配置</h2>
+        <form id="adPlacementForm" class="user-form">
+          <input name="id" placeholder="ad-sidebar-free-trial" required />
+          <input name="placement" placeholder="catalog-sidebar" value="catalog-sidebar" required />
+          <input name="title" placeholder="广告标题" required />
+          <input name="targetUrl" placeholder="目标链接，例如 /#/admin" />
+          <input name="imageUrl" placeholder="图片 URL（可选）" />
+          <label class="check-row"><input name="enabled" type="checkbox" checked /><span>启用</span></label>
+          <textarea name="body" placeholder="广告文案"></textarea>
+          <button class="primary-button" type="submit">保存广告位</button>
+        </form>
+        <div class="log-list">
+          ${(adPlacements || []).map((ad) => `
+            <article>
+              <strong>${escapeHtml(ad.title)}</strong>
+              <span>${escapeHtml(ad.placement)} · ${ad.enabled ? "enabled" : "disabled"} · ${escapeHtml(ad.targetUrl || "")}</span>
+            </article>
+          `).join("") || `<p class="muted">暂无广告位。未启用广告时也可以先准备素材。</p>`}
+        </div>
+      </section>
+    </div>
   `;
 }
 

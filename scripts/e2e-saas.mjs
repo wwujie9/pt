@@ -251,6 +251,64 @@ await step("导出 workspace 级备份", () => {
   assert(workspaceBackup.sources.length === 3, "备份未按 workspace 隔离来源");
 });
 
+const publicCatalog = await request(`/api/public/catalog?workspaceId=${encodeURIComponent(workspace.id)}&limit=3`);
+await step("公开嵌入目录 API 可被外部站点读取", () => {
+  assert(publicCatalog.workspaceId === workspace.id, "公开目录 workspace 不正确");
+  assert(Array.isArray(publicCatalog.items), "公开目录未返回列表");
+});
+
+await request("/api/growth/visit", {
+  method: "POST",
+  body: {
+    workspaceId: workspace.id,
+    sourceSite: "traffic.example.local",
+    utmCampaign: `campaign-${runId}`,
+    utmSource: "existing-site",
+    utmMedium: "embed",
+    landingPath: "/pt-hub",
+  },
+});
+const adPlacement = await request("/api/ads/placements", {
+  method: "POST",
+  token,
+  workspaceId: workspace.id,
+  body: {
+    id: `ad-${runId}`,
+    placement: "catalog-sidebar",
+    title: "E2E Growth Ad",
+    body: "Free first campaign",
+    targetUrl: "/#/admin",
+    enabled: true,
+  },
+});
+await request("/api/public/ads/events", {
+  method: "POST",
+  body: {
+    workspaceId: workspace.id,
+    placementId: adPlacement.id,
+    eventType: "impression",
+    sourceSite: "traffic.example.local",
+    utmCampaign: `campaign-${runId}`,
+  },
+});
+await request("/api/public/ads/events", {
+  method: "POST",
+  body: {
+    workspaceId: workspace.id,
+    placementId: adPlacement.id,
+    eventType: "click",
+    sourceSite: "traffic.example.local",
+    utmCampaign: `campaign-${runId}`,
+  },
+});
+const growth = await request("/api/growth/metrics", { token, workspaceId: workspace.id });
+await step("记录外部流量归因与广告事件", () => {
+  assert(growth.visits >= 1, "未记录外部访问");
+  assert(growth.campaigns.some((item) => item.campaign === `campaign-${runId}`), "未统计 UTM campaign");
+  assert(growth.ads.impressions >= 1 && growth.ads.clicks >= 1, "未统计广告展示/点击");
+  assert(String(growth.embed.script || "").includes("/embed.js"), "未生成嵌入代码");
+});
+
 if (failed) {
   process.exit(1);
 }

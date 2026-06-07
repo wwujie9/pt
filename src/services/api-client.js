@@ -74,6 +74,22 @@ export async function fetchBillingPlans() {
   return request("/api/billing/plans");
 }
 
+export async function fetchGrowthMetrics() {
+  return request("/api/growth/metrics");
+}
+
+export async function fetchAdPlacements() {
+  return request("/api/ads/placements");
+}
+
+export async function saveAdPlacement(placement) {
+  return request("/api/ads/placements", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(placement),
+  });
+}
+
 export async function fetchDownloadClients() {
   return request("/api/download-clients");
 }
