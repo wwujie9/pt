@@ -48,6 +48,8 @@ services:
     image: ${APP_IMAGE:-ghcr.io/wwujie9/pt:latest}
     restart: unless-stopped
     command: ["npm", "run", "worker"]
+    healthcheck:
+      disable: true
     env_file:
       - ../.env.production
     volumes:

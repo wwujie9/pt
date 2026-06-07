@@ -8,11 +8,12 @@ const plans = {
 };
 
 export async function getPlan(workspaceId = "default") {
-  const row = await db.prepare("SELECT plan FROM workspaces WHERE id = ?").get(workspaceId);
+  const row = await db.prepare("SELECT plan, created_at FROM workspaces WHERE id = ?").get(workspaceId);
   const planName = row?.plan || "starter";
   return {
     name: planName,
     limits: plans[planName] || plans.starter,
+    commercial: commercialStrategy(row),
   };
 }
 
@@ -52,7 +53,11 @@ export async function assertSyncInterval(workspaceId) {
 }
 
 export function listPlans() {
-  return Object.entries(plans).map(([name, limits]) => ({ name, limits }));
+  return Object.entries(plans).map(([name, limits]) => ({
+    name,
+    limits,
+    commercial: commercialStrategy(),
+  }));
 }
 
 export async function getUsage(workspaceId = "default") {
@@ -256,6 +261,34 @@ function parsePayload(payload) {
 
 function countValue(row) {
   return Number(row?.count || 0);
+}
+
+function commercialStrategy(workspace = null) {
+  const trialDays = envNumber("FREE_TRIAL_DAYS", 180);
+  const createdAt = workspace?.created_at || null;
+  const freeUntil = createdAt ? addDays(createdAt, trialDays).toISOString() : null;
+  const trialRemainingDays = freeUntil ? Math.max(0, Math.ceil((new Date(freeUntil).getTime() - Date.now()) / 86400000)) : trialDays;
+  return {
+    acquisitionMode: process.env.ACQUISITION_MODE || "free_first",
+    trialDays,
+    freeUntil,
+    trialRemainingDays,
+    trialActive: trialRemainingDays > 0,
+    billingMode: trialRemainingDays > 0 ? "free" : process.env.PAYMENT_PROVIDER || "manual",
+    ads: {
+      enabled: process.env.ENABLE_ADS === "1",
+      provider: process.env.AD_PROVIDER || "manual",
+      placement: process.env.AD_PLACEMENT || "catalog-sidebar",
+      minActiveWorkspaces: envNumber("AD_MIN_ACTIVE_WORKSPACES", 50),
+    },
+  };
+}
+
+function addDays(value, days) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return new Date(Date.now() + days * 86400000);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date;
 }
 
 async function createProviderCheckout(provider, workspaceId, planName, actor) {
@@ -495,4 +528,9 @@ function requiredEnv(name, message) {
   const value = process.env[name];
   if (!value) throw new Error(message);
   return value;
+}
+
+function envNumber(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) ? value : fallback;
 }

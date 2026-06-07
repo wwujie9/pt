@@ -18,9 +18,11 @@
 
 建议推广节奏：
 
+- 免费获客期：默认 `FREE_TRIAL_DAYS=180`，前半年先免费获取用户、来源接入案例和自然流量。
 - 对客户演示：使用本地或预发环境，登录 `#/admin` 后先走“客户首次使用向导”，再展示运营控制台、来源管理、Workspace、邀请、套餐、支付运营和监控。
 - 小范围试点：使用 PostgreSQL + Redis + worker + RLS + HTTPS，先接入客户已有授权来源。
-- 正式上线：接入真实邮件、支付 sandbox 验证、对象存储备份、监控 webhook 和定期恢复演练。
+- 量起来后：设置 `ENABLE_ADS=1` 并接入广告 provider，优先在目录侧边栏、详情页资源区等低打扰位置做营收。
+- 正式上线：接入真实邮件、支付 sandbox 验证、对象存储备份、监控 webhook、广告审核策略和定期恢复演练。
 
 ## 当前交付状态
 
@@ -69,6 +71,7 @@
 - 备份生命周期策略与生产监控告警。
 - 客户首次使用向导：创建 workspace、邀请成员、添加来源、测试来源、首次同步、查看监控。
 - 管理页运营控制台：监控健康、备份新鲜度、任务总量、发票、退款、webhook 重放。
+- 免费获客商业策略：前 180 天免费、广告营收开关、广告位与活跃租户阈值配置。
 - Redis 多实例共享限流。
 - Trivy 镜像安全扫描与 Dependabot。
 
@@ -140,6 +143,14 @@ PostgreSQL 启动时会执行 `deploy/postgres-schema.sql` 并使用同一套服
 docker compose up --build
 ```
 
+本地 Docker 推广验收一键跑：
+
+```powershell
+npm run demo:docker
+```
+
+该命令会启动 `postgres`、`redis`、`pt-resource-hub`、`pt-resource-worker`，准备演示数据，生成 PostgreSQL 备份，并执行 smoke、SaaS E2E、支付 sandbox 合同、监控检查和商业策略校验。默认访问地址是 `http://127.0.0.1:4273`。
+
 上线前务必修改 `docker-compose.yml` 中的：
 
 - `ADMIN_PASSWORD`
@@ -194,6 +205,7 @@ npm run db:migrations
 生产运营检查：
 
 ```powershell
+npm run demo:docker
 npm run demo:seed
 npm run monitoring:check
 npm run backup:lifecycle

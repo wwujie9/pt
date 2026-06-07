@@ -249,6 +249,7 @@ export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, au
           <span>发票记录</span>
         </article>
       </section>
+      ${renderCommercialStrategy(billing)}
       <div class="admin-grid">
         <section class="admin-panel">
           <div class="panel-heading">
@@ -432,10 +433,10 @@ export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, au
           <div class="log-list">
             <article>
               <strong>${escapeHtml(billing?.name || "unknown")}</strong>
-              <span>用户 ${billing?.limits?.users ?? "-"} · 来源 ${billing?.limits?.sources ?? "-"} · 同步间隔 ${billing?.limits?.syncIntervalMinutes ?? "-"} 分钟</span>
+              <span>用户 ${billing?.limits?.users ?? "-"} · 来源 ${billing?.limits?.sources ?? "-"} · 同步间隔 ${billing?.limits?.syncIntervalMinutes ?? "-"} 分钟 · ${commercialLabel(billing?.commercial)}</span>
             </article>
             ${(plans || [])
-              .map((plan) => `<article><strong>${escapeHtml(plan.name)}</strong><span>users ${plan.limits.users} · sources ${plan.limits.sources} · sync ${plan.limits.syncIntervalMinutes}m</span><div class="inline-actions"><button data-change-plan="${escapeHtml(plan.name)}">切换</button></div></article>`)
+              .map((plan) => `<article><strong>${escapeHtml(plan.name)}</strong><span>users ${plan.limits.users} · sources ${plan.limits.sources} · sync ${plan.limits.syncIntervalMinutes}m · 免费 ${plan.commercial?.trialDays ?? 180} 天</span><div class="inline-actions"><button data-change-plan="${escapeHtml(plan.name)}">切换</button></div></article>`)
               .join("")}
             <article>
               <strong>当前用量</strong>
@@ -776,6 +777,33 @@ function renderMonitoring(monitoring) {
       ${alerts.map((alert) => `<article class="alert-row"><strong>${escapeHtml(alert.metric)}</strong><span>${escapeHtml(alert.message)} · ${escapeHtml(alert.value ?? "-")} / ${escapeHtml(alert.threshold ?? "-")}</span></article>`).join("")}
     </div>
   `;
+}
+
+function renderCommercialStrategy(billing) {
+  const commercial = billing?.commercial;
+  if (!commercial) return "";
+  return `
+    <section class="growth-strategy">
+      <article>
+        <strong>前 ${commercial.trialDays ?? 180} 天免费</strong>
+        <span>${commercial.trialActive ? `剩余 ${commercial.trialRemainingDays ?? "-"} 天` : "免费期已结束"} · 计费模式 ${escapeHtml(commercial.billingMode || "manual")}</span>
+      </article>
+      <article>
+        <strong>${commercial.ads?.enabled ? "广告营收已启用" : "广告营收待启用"}</strong>
+        <span>${escapeHtml(commercial.ads?.provider || "manual")} · ${escapeHtml(commercial.ads?.placement || "catalog-sidebar")} · 建议 ${commercial.ads?.minActiveWorkspaces ?? 50}+ 活跃租户后开启</span>
+      </article>
+      <article>
+        <strong>推广策略</strong>
+        <span>${escapeHtml(commercial.acquisitionMode || "free_first")} · 先用免费期换取用户与流量，后续用广告位和付费套餐变现。</span>
+      </article>
+    </section>
+  `;
+}
+
+function commercialLabel(commercial) {
+  if (!commercial) return "商业策略未配置";
+  if (commercial.trialActive) return `免费期剩余 ${commercial.trialRemainingDays ?? "-"} 天`;
+  return `计费模式 ${commercial.billingMode || "manual"}`;
 }
 
 function formatHours(hours) {

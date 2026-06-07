@@ -25,7 +25,7 @@ services:
     container_name: pt-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -58,6 +58,14 @@ services:
       EMAIL_WEBHOOK_URL: ""
       INVITE_TTL_HOURS: "72"
       PAYMENT_PROVIDER: "manual"
+      STRIPE_WEBHOOK_SECRET: "whsec_test"
+      LEMON_WEBHOOK_SECRET: "lem_test"
+      ACQUISITION_MODE: "free_first"
+      FREE_TRIAL_DAYS: "180"
+      ENABLE_ADS: "0"
+      AD_PROVIDER: "manual"
+      AD_PLACEMENT: "catalog-sidebar"
+      AD_MIN_ACTIVE_WORKSPACES: "50"
       DATABASE_DRIVER: "postgres"
       DATABASE_URL: "postgres://pt_app:pt_app_password@postgres:5432/pt_resource_hub"
       DATABASE_MIGRATION_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"
@@ -75,6 +83,8 @@ services:
     container_name: pt-resource-worker
     restart: unless-stopped
     command: ["npm", "run", "worker"]
+    healthcheck:
+      disable: true
     environment:
       PORT: "4273"
       REQUIRE_AUTH: "1"
@@ -82,6 +92,14 @@ services:
       ADMIN_PASSWORD: "change-me-before-demo"
       ADMIN_TOKEN: "change-me-admin-token"
       CREDENTIAL_SECRET: "change-me-credential-secret"
+      STRIPE_WEBHOOK_SECRET: "whsec_test"
+      LEMON_WEBHOOK_SECRET: "lem_test"
+      ACQUISITION_MODE: "free_first"
+      FREE_TRIAL_DAYS: "180"
+      ENABLE_ADS: "0"
+      AD_PROVIDER: "manual"
+      AD_PLACEMENT: "catalog-sidebar"
+      AD_MIN_ACTIVE_WORKSPACES: "50"
       DATABASE_DRIVER: "postgres"
       DATABASE_URL: "postgres://pt_app:pt_app_password@postgres:5432/pt_resource_hub"
       DATABASE_MIGRATION_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"

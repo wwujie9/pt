@@ -944,6 +944,36 @@ pre {
   font-size: 13px;
 }
 
+.growth-strategy {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.growth-strategy article {
+  padding: 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+
+.growth-strategy strong,
+.growth-strategy span {
+  display: block;
+}
+
+.growth-strategy strong {
+  color: var(--blue);
+}
+
+.growth-strategy span {
+  margin-top: 6px;
+  color: #46566f;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .panel-heading {
   display: flex;
   align-items: center;
@@ -1134,6 +1164,7 @@ pre {
   .media-grid,
   .layer-map,
   .ops-dashboard,
+  .growth-strategy,
   .onboarding-steps {
     grid-template-columns: 1fr 1fr;
   }
@@ -1184,6 +1215,7 @@ pre {
   .media-grid,
   .layer-map,
   .ops-dashboard,
+  .growth-strategy,
   .onboarding-steps,
   .onboarding-actions,
   .onboarding-form,

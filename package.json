@@ -17,6 +17,7 @@
     "test:rls": "node scripts/e2e-rls.mjs",
     "test:payment-contract": "node scripts/payment-contract-test.mjs",
     "demo:seed": "node scripts/demo-seed.mjs",
+    "demo:docker": "node scripts/docker-promotion-test.mjs",
     "backup": "node scripts/backup.mjs",
     "backup:postgres": "node scripts/postgres-backup.mjs",
     "backup:archive": "node scripts/archive-backup.mjs",

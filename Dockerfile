@@ -11,6 +11,7 @@ COPY public ./public
 COPY server ./server
 COPY src ./src
 COPY scripts ./scripts
+COPY deploy ./deploy
 COPY docs ./docs
 COPY README.md ./
 
