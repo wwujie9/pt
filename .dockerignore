@@ -11,3 +11,4 @@ storage/*.db-shm
 storage/*.db-wal
 storage/backups
 storage/postgres-backups
+storage/*.log

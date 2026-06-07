@@ -17,7 +17,7 @@
 - 账单事件、checkout、套餐切换。
 - 下载器配置、任务队列、独立 worker。
 - PostgreSQL 版本化 migrations 目录。
-- RLS 启用 SQL 脚本。
+- RLS 请求级事务封装、PostgreSQL session context 和启用 SQL 脚本。
 - Stripe / Lemon Squeezy checkout 和签名 webhook。
 - Resend / SMTP relay / generic webhook 邮件 provider。
 - PostgreSQL `pg_dump` 备份和恢复演练脚本。
@@ -228,20 +228,27 @@ REDIS_URL=redis://redis:6379
 当前状态：
 
 - 已有 RLS SQL：`deploy/rls/enable-workspace-rls.sql`。
-- 还未默认启用。
+- 已完成请求级事务封装。
+- 已完成 PostgreSQL session context：`app.workspace_id` / `app.rls_bypass`。
+- 已完成低权限 runtime role provision：`npm run db:provision-app-role`。
+- 已完成 RLS E2E：`npm run test:rls`。
 
-必须先完成：
+必须使用双连接身份：
 
-- 请求级事务封装。
-- 每个请求设置：
+- `DATABASE_MIGRATION_URL`：owner / migration 账号。
+- `DATABASE_URL`：低权限 app runtime 账号，必须 `NOSUPERUSER NOBYPASSRLS`。
+
+每个请求事务会设置：
 
 ```sql
 SET LOCAL app.workspace_id = '<workspace_id>';
 ```
 
-- 平台管理员路径设计绕行策略，例如专用连接、专用 role 或显式 all-workspace policy。
-- worker 任务处理时设置任务所属 workspace。
-- backup / audit / platform admin 路径单独验证。
+受控平台路径会设置：
+
+```sql
+SET LOCAL app.rls_bypass = '1';
+```
 
 预发验收：
 
@@ -250,11 +257,23 @@ SET LOCAL app.workspace_id = '<workspace_id>';
 - 平台管理员全局审计路径可控。
 - SaaS E2E 全绿。
 - 手工 SQL 漏写 `workspace_id` 时仍被 RLS 阻断。
+- API smoke / SaaS E2E / worker run once 全绿。
 
 生产启用：
 
 ```bash
-docker exec -i pt-postgres psql "$DATABASE_URL" < deploy/rls/enable-workspace-rls.sql
+DATABASE_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
+POSTGRES_APP_USER=pt_app \
+POSTGRES_APP_PASSWORD=replace-with-strong-password \
+npm run db:provision-app-role
+
+DATABASE_URL=postgres://pt_app:app-password@postgres:5432/pt_resource_hub \
+DATABASE_MIGRATION_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
+npm run db:rls:enable
+
+DATABASE_URL=postgres://pt_app:app-password@postgres:5432/pt_resource_hub \
+DATABASE_MIGRATION_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
+npm run test:rls
 ```
 
 ## 阶段 8：安全与供应链治理
@@ -318,11 +337,11 @@ P1：
 
 P2：
 
-- RLS 请求级事务改造。
+- RLS 线上观测指标和告警。
 - SBOM / 镜像签名。
 - 对象存储备份归档。
 - 支付发票、退款、webhook 重放。
 
 ## 下一轮开发建议
 
-建议下一轮专注 RLS 真实启用所需的请求级事务封装，因为这是当前最有技术深度、也最能提升客户信任的生产能力。完成后，租户隔离将从“应用层纪律”升级为“数据库强约束”。
+建议下一轮专注对象存储备份归档、恢复 SLA 演练和支付 sandbox 合同测试。RLS 已经从“应用层纪律”升级为“数据库强约束”，后续重点应转向运营可靠性和商业化闭环。

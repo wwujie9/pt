@@ -3,7 +3,7 @@ import { db } from "./db.js";
 export async function appendAuditLog({ actor, workspaceId, action, targetType, targetId, payload = {} }) {
   const entry = {
     id: `audit-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    workspaceId: workspaceId || actor?.workspaceId || "default",
+    workspaceId: workspaceId || db.currentWorkspaceId?.() || actor?.workspaceId || "default",
     actorId: actor?.id || null,
     actorEmail: actor?.email || null,
     action,
@@ -12,6 +12,11 @@ export async function appendAuditLog({ actor, workspaceId, action, targetType, t
     payload: sanitize(payload),
     createdAt: new Date().toISOString(),
   };
+
+  if (process.env.DEBUG_RLS === "1") {
+    const setting = await db.prepare("SELECT current_setting('app.workspace_id', true) AS workspace_id, current_setting('app.rls_bypass', true) AS bypass").get();
+    console.warn(`[audit] action=${action} workspace=${entry.workspaceId} context=${db.currentWorkspaceId?.() || ""} setting=${setting?.workspace_id || ""} bypass=${setting?.bypass || ""}`);
+  }
 
   await db.prepare(`
     INSERT INTO audit_logs (id, workspace_id, actor_id, action, target_type, target_id, payload, created_at)

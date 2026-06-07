@@ -39,6 +39,7 @@
 - SaaS E2E 脚本与 GitHub Actions CI。
 - PostgreSQL runtime adapter、迁移路径与生产 schema。
 - PostgreSQL 版本化 migrations 目录。
+- PostgreSQL RLS 请求级事务封装、session context 和低权限 runtime role。
 - Stripe / Lemon Squeezy checkout 与签名 webhook。
 - Resend / SMTP relay / webhook 邮件 provider。
 - PostgreSQL `pg_dump` 备份与恢复演练脚本。

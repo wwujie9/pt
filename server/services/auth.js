@@ -289,4 +289,4 @@ async function clearFailedLogin(email) {
   await db.prepare("DELETE FROM login_attempts WHERE email = ?").run(email);
 }
 
-await ensureBootstrapAdmin();
+await db.withRlsBypass(() => ensureBootstrapAdmin());

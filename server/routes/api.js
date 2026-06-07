@@ -1,5 +1,6 @@
 import { badRequest, json, notFound, readJsonBody, readRawBody } from "../lib/http.js";
-import { getAuthContext, isPlatformAdmin, requireAdmin, requirePermission, requirePlatformAdmin } from "../lib/auth.js";
+import { getAuthContext, hasPermission, isPlatformAdmin } from "../lib/auth.js";
+import { db } from "../services/db.js";
 import { getMedia, getStats, listMedia, listResources } from "../services/catalog.js";
 import { loadSyncLogs } from "../services/store.js";
 import { exportBackup, loadReviewQueue, updateResourceStatus, upsertMedia } from "../services/store.js";
@@ -41,26 +42,35 @@ import {
 } from "../services/downloads.js";
 
 export async function handleApi(req, res, url) {
-  const authContext = await getAuthContext(req);
+  const authContext = await db.withRlsBypass(() => getAuthContext(req));
   const workspaceId = currentWorkspaceId(req, authContext);
   const authError = requireAuthenticated(req, url, authContext);
   if (authError) return json(res, 401, authError);
   if (shouldValidateWorkspace(req, url) && !(await workspaceExists(workspaceId))) {
     return badRequest(res, "Workspace 不存在或已禁用");
   }
-  const platformError = needsPlatformAdmin(req, url) ? await requirePlatformAdmin(req) : null;
-  if (platformError) return json(res, 403, platformError);
+  if (needsPlatformAdmin(req, url) && !isPlatformAdmin(authContext) && process.env.ALLOW_INSECURE_DEV !== "1") {
+    return json(res, 403, { error: "需要平台管理员权限" });
+  }
   const permission = requiredPermission(req, url);
   if (permission) {
-    const permissionError = await requirePermission(req, permission);
-    if (permissionError) return json(res, 403, permissionError);
+    if (!authContext.isAdminToken && process.env.ALLOW_INSECURE_DEV !== "1" && !hasPermission(authContext.user, permission)) {
+      return json(res, 403, { error: `缺少权限：${permission}` });
+    }
   } else {
-    const adminError = needsAdmin(req, url) ? await requireAdmin(req) : null;
-    if (adminError) {
-      return json(res, 401, adminError);
+    if (needsAdmin(req, url) && process.env.ALLOW_INSECURE_DEV !== "1" && !authContext.isAdminToken && authContext.user?.role !== "admin") {
+      return json(res, 401, { error: "需要管理员令牌" });
     }
   }
 
+  return db.withWorkspaceContext(
+    workspaceId,
+    async () => handleApiWithContext(req, res, url, authContext, workspaceId),
+    { bypass: routeNeedsRlsBypass(req, url, authContext) },
+  );
+}
+
+async function handleApiWithContext(req, res, url, authContext, workspaceId) {
   if (req.method === "GET" && url.pathname === "/api/stats") {
     return json(res, 200, await getStats(workspaceId));
   }
@@ -252,16 +262,21 @@ export async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/users") {
     try {
       const body = await readJsonBody(req);
-      const user = await createUser({
-        ...body,
-        workspaceId: isPlatformAdmin(authContext) ? body.workspaceId || workspaceId : workspaceId,
-      });
-      await appendAuditLog({
-        actor: authContext.user,
-        action: "user.create",
-        targetType: "user",
-        targetId: user.id,
-        payload: user,
+      const targetWorkspaceId = isPlatformAdmin(authContext) ? body.workspaceId || workspaceId : workspaceId;
+      const user = await db.withWorkspaceContext(targetWorkspaceId, async () => {
+        const created = await createUser({
+          ...body,
+          workspaceId: targetWorkspaceId,
+        });
+        await appendAuditLog({
+          actor: authContext.user,
+          workspaceId: targetWorkspaceId,
+          action: "user.create",
+          targetType: "user",
+          targetId: created.id,
+          payload: created,
+        });
+        return created;
       });
       return json(res, 200, user);
     } catch (error) {
@@ -272,18 +287,22 @@ export async function handleApi(req, res, url) {
   if (req.method === "POST" && url.pathname === "/api/invitations") {
     try {
       const body = await readJsonBody(req);
-      const invite = await inviteUser({
-        ...body,
-        workspaceId: isPlatformAdmin(authContext) ? body.workspaceId || workspaceId : workspaceId,
-      });
-      await sendInvitationEmail(invite);
-      await appendAuditLog({
-        actor: authContext.user,
-        workspaceId: invite.workspaceId,
-        action: "user.invite",
-        targetType: "user",
-        targetId: invite.id,
-        payload: { email: invite.email, role: invite.role, workspaceId: invite.workspaceId },
+      const targetWorkspaceId = isPlatformAdmin(authContext) ? body.workspaceId || workspaceId : workspaceId;
+      const invite = await db.withWorkspaceContext(targetWorkspaceId, async () => {
+        const created = await inviteUser({
+          ...body,
+          workspaceId: targetWorkspaceId,
+        });
+        await sendInvitationEmail(created);
+        await appendAuditLog({
+          actor: authContext.user,
+          workspaceId: created.workspaceId,
+          action: "user.invite",
+          targetType: "user",
+          targetId: created.id,
+          payload: { email: created.email, role: created.role, workspaceId: created.workspaceId },
+        });
+        return created;
       });
       return json(res, 200, invite);
     } catch (error) {
@@ -533,6 +552,15 @@ export async function handleApi(req, res, url) {
   }
 
   return notFound(res);
+}
+
+function routeNeedsRlsBypass(req, url, authContext) {
+  if (url.pathname === "/api/invitations/accept") return true;
+  if (url.pathname.startsWith("/api/billing/webhooks/")) return true;
+  if (url.pathname === "/api/audit-logs" && isPlatformAdmin(authContext) && url.searchParams.get("all") === "1") return true;
+  if (url.pathname === "/api/jobs/backup" && isPlatformAdmin(authContext)) return true;
+  if (url.pathname === "/api/workspaces" && req.method === "POST" && isPlatformAdmin(authContext)) return true;
+  return false;
 }
 
 function getBearerToken(req) {

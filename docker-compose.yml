@@ -9,6 +9,8 @@ services:
       POSTGRES_DB: "pt_resource_hub"
       POSTGRES_USER: "pt"
       POSTGRES_PASSWORD: "pt_password"
+      POSTGRES_APP_USER: "pt_app"
+      POSTGRES_APP_PASSWORD: "pt_app_password"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pt -d pt_resource_hub"]
       interval: 5s
@@ -16,6 +18,7 @@ services:
       retries: 20
     volumes:
       - pt-postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres-init:/docker-entrypoint-initdb.d:ro
 
   redis:
     image: redis:7-alpine
@@ -56,7 +59,8 @@ services:
       INVITE_TTL_HOURS: "72"
       PAYMENT_PROVIDER: "manual"
       DATABASE_DRIVER: "postgres"
-      DATABASE_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"
+      DATABASE_URL: "postgres://pt_app:pt_app_password@postgres:5432/pt_resource_hub"
+      DATABASE_MIGRATION_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"
       REDIS_URL: "redis://redis:6379"
     volumes:
       - ./storage:/app/storage
@@ -79,7 +83,8 @@ services:
       ADMIN_TOKEN: "change-me-admin-token"
       CREDENTIAL_SECRET: "change-me-credential-secret"
       DATABASE_DRIVER: "postgres"
-      DATABASE_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"
+      DATABASE_URL: "postgres://pt_app:pt_app_password@postgres:5432/pt_resource_hub"
+      DATABASE_MIGRATION_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"
       REDIS_URL: "redis://redis:6379"
       WORKER_ID: "worker-compose"
       WORKER_INTERVAL_MS: "3000"

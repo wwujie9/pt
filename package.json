@@ -14,10 +14,13 @@
     "worker": "node --no-warnings server/worker.js",
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:e2e": "node scripts/e2e-saas.mjs",
+    "test:rls": "node scripts/e2e-rls.mjs",
     "backup": "node scripts/backup.mjs",
     "backup:postgres": "node scripts/postgres-backup.mjs",
     "backup:postgres:restore": "node scripts/postgres-restore-drill.mjs",
-    "db:migrations": "node --no-warnings scripts/check-migrations.mjs"
+    "db:migrations": "node --no-warnings scripts/check-migrations.mjs",
+    "db:provision-app-role": "node --no-warnings scripts/provision-postgres-app-role.mjs",
+    "db:rls:enable": "node --no-warnings scripts/enable-rls.mjs"
   },
   "engines": {
     "node": ">=22"

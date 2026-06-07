@@ -118,11 +118,34 @@ jobs:
           DATABASE_DRIVER: postgres
           DATABASE_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
 
+      - name: Provision PostgreSQL app role
+        run: npm run db:provision-app-role
+        env:
+          DATABASE_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+          POSTGRES_DB: pt_resource_hub
+          POSTGRES_APP_USER: pt_app
+          POSTGRES_APP_PASSWORD: pt_app_password
+
+      - name: Enable PostgreSQL RLS
+        run: npm run db:rls:enable
+        env:
+          DATABASE_DRIVER: postgres
+          DATABASE_URL: postgres://pt_app:pt_app_password@127.0.0.1:5432/pt_resource_hub
+          DATABASE_MIGRATION_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+
+      - name: RLS E2E
+        run: npm run test:rls
+        env:
+          DATABASE_DRIVER: postgres
+          DATABASE_URL: postgres://pt_app:pt_app_password@127.0.0.1:5432/pt_resource_hub
+          DATABASE_MIGRATION_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+
       - name: Start app with PostgreSQL
         run: |
           PORT=4273 \
           DATABASE_DRIVER=postgres \
-          DATABASE_URL=postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub \
+          DATABASE_URL=postgres://pt_app:pt_app_password@127.0.0.1:5432/pt_resource_hub \
+          DATABASE_MIGRATION_URL=postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub \
           REQUIRE_AUTH=1 \
           ALLOW_INSECURE_DEV=0 \
           ADMIN_EMAIL=admin@example.local \
@@ -157,7 +180,8 @@ jobs:
         run: npm run worker
         env:
           DATABASE_DRIVER: postgres
-          DATABASE_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+          DATABASE_URL: postgres://pt_app:pt_app_password@127.0.0.1:5432/pt_resource_hub
+          DATABASE_MIGRATION_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
           REDIS_URL: redis://127.0.0.1:6379
           CREDENTIAL_SECRET: ci-secret-at-least-32-characters
           WORKER_RUN_ONCE: "1"

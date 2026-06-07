@@ -45,19 +45,56 @@ current_setting('app.workspace_id', true)
 
 作为租户上下文。
 
-重要：不要在当前版本直接对生产库执行该脚本。启用 RLS 前必须完成连接级租户上下文注入，例如每个请求在事务内执行：
+当前版本已经完成请求级事务封装和 PostgreSQL session context 注入。每个租户请求会在事务内设置：
 
 ```sql
 SET LOCAL app.workspace_id = '<workspace_id>';
 ```
 
-推荐启用阶段：
+同时，认证、迁移、平台全局审计、支付 webhook 等路径使用受控 bypass：
 
-1. 预发库执行 RLS 脚本。
-2. 增加请求级事务封装和 `SET LOCAL app.workspace_id`。
-3. 对所有 workspace API 跑 SaaS E2E。
-4. 确认平台管理员全局审计和备份路径有单独策略。
-5. 再对生产启用。
+```sql
+SET LOCAL app.rls_bypass = '1';
+```
+
+生产必须使用两个数据库连接身份：
+
+- `DATABASE_MIGRATION_URL`：owner / migration 账号，用于 DDL、迁移、seed 和 provision。
+- `DATABASE_URL`：低权限 app runtime 账号，必须是 `NOSUPERUSER NOBYPASSRLS`。
+
+创建运行账号：
+
+```bash
+DATABASE_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
+POSTGRES_APP_USER=pt_app \
+POSTGRES_APP_PASSWORD=replace-with-strong-password \
+npm run db:provision-app-role
+```
+
+启用 RLS：
+
+```bash
+DATABASE_URL=postgres://pt_app:app-password@postgres:5432/pt_resource_hub \
+DATABASE_MIGRATION_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
+npm run db:rls:enable
+```
+
+验证：
+
+```bash
+DATABASE_URL=postgres://pt_app:app-password@postgres:5432/pt_resource_hub \
+DATABASE_MIGRATION_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
+npm run test:rls
+```
+
+启用检查：
+
+1. 预发库执行 `db:provision-app-role`。
+2. 预发库执行 `db:rls:enable`。
+3. 执行 `npm run test:rls`。
+4. 以 app runtime 账号启动服务。
+5. 执行 smoke、SaaS E2E、worker run once。
+6. 再对生产启用。
 
 ## 3. 真实支付
 
@@ -211,6 +248,6 @@ Dependabot 已启用：
 3. 启用 Stripe/Lemon sandbox，验证 checkout 和 webhook。
 4. 配置 `backup:postgres` 定时任务，并做一次恢复演练。
 5. 合并 Trivy/Dependabot 的安全修复。
-6. 在预发环境开发请求级事务和 `SET LOCAL app.workspace_id`。
-7. 预发启用 RLS，跑完整 E2E。
-8. 生产启用 RLS。
+6. 预发启用 RLS，跑 `test:rls`、smoke、SaaS E2E、worker。
+7. 生产启用 RLS。
+8. 对 branch protection、备份恢复和支付 sandbox 做上线前复核。

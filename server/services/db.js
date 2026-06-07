@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -16,13 +17,16 @@ const sourceExampleFile = resolve(root, "server/config/sources.example.json");
 mkdirSync(storageDir, { recursive: true });
 
 const driver = process.env.DATABASE_DRIVER || "sqlite";
+const queryContext = new AsyncLocalStorage();
 
 export const db = driver === "postgres"
   ? await createPostgresAdapter()
   : createSqliteAdapter();
 
-await runMigrations();
-await seedIfEmpty();
+await db.withMigrationContext(async () => {
+  await runMigrations();
+  await seedIfEmpty();
+});
 
 export const paths = {
   dbFile,
@@ -49,6 +53,21 @@ function createSqliteAdapter() {
     exec: async (sql) => sqlite.exec(sql),
     columns: async (table) => sqlite.prepare(`PRAGMA table_info(${table})`).all().map((row) => row.name),
     close: async () => sqlite.close(),
+    currentWorkspaceId: () => null,
+    transaction: async (fn) => {
+      sqlite.exec("BEGIN");
+      try {
+        const result = await fn();
+        sqlite.exec("COMMIT");
+        return result;
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    withMigrationContext: async (fn) => fn(),
+    withWorkspaceContext: async (_workspaceId, fn) => fn(),
+    withRlsBypass: async (fn) => fn(),
   };
 }
 
@@ -65,37 +84,116 @@ async function createPostgresAdapter() {
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.DATABASE_SSL === "1" ? { rejectUnauthorized: false } : undefined,
   });
+  const migrationPool = process.env.DATABASE_MIGRATION_URL
+    ? new Pool({
+      connectionString: process.env.DATABASE_MIGRATION_URL,
+      ssl: process.env.DATABASE_SSL === "1" ? { rejectUnauthorized: false } : undefined,
+    })
+    : pool;
 
   return {
     driver: "postgres",
     prepare(sql) {
       return {
         get: async (...args) => {
-          const result = await pool.query(toPostgresSql(sql), args);
+          const result = await currentPostgresClient(pool).query(toPostgresSql(sql), args);
           return result.rows[0] || null;
         },
         all: async (...args) => {
-          const result = await pool.query(toPostgresSql(sql), args);
+          const result = await currentPostgresClient(pool).query(toPostgresSql(sql), args);
           return result.rows;
         },
         run: async (...args) => {
-          const result = await pool.query(toPostgresSql(sql), args);
+          const result = await currentPostgresClient(pool).query(toPostgresSql(sql), args);
           return { changes: result.rowCount };
         },
       };
     },
     exec: async (sql) => {
-      await pool.query(toPostgresSql(sql));
+      await currentPostgresClient(pool).query(toPostgresSql(sql));
     },
     columns: async (table) => {
-      const result = await pool.query(
+      const result = await currentPostgresClient(pool).query(
         "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 ORDER BY ordinal_position",
         [table],
       );
       return result.rows.map((row) => row.column_name);
     },
-    close: async () => pool.end(),
+    close: async () => {
+      await pool.end();
+      if (migrationPool !== pool) await migrationPool.end();
+    },
+    currentWorkspaceId: () => queryContext.getStore()?.workspaceId || null,
+    transaction: async (fn) => {
+      if (queryContext.getStore()?.client) return fn();
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const result = await queryContext.run({ client, workspaceId: null, bypass: false }, fn);
+        await client.query("COMMIT");
+        return result;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    },
+    withMigrationContext: async (fn) => withPostgresContext(migrationPool, {
+      workspaceId: "default",
+      bypass: true,
+    }, fn),
+    withWorkspaceContext: async (workspaceId, fn, options = {}) => withPostgresContext(pool, {
+      workspaceId,
+      bypass: Boolean(options.bypass),
+    }, fn),
+    withRlsBypass: async (fn) => withPostgresContext(pool, {
+      workspaceId: "default",
+      bypass: true,
+    }, fn),
   };
+}
+
+function currentPostgresClient(pool) {
+  return queryContext.getStore()?.client || pool;
+}
+
+async function withPostgresContext(pool, context, fn) {
+  const existing = queryContext.getStore();
+  if (existing?.client) {
+    return withPostgresSettings(existing.client, context, fn);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await queryContext.run({ client, workspaceId: context.workspaceId, bypass: context.bypass }, async () => withPostgresSettings(client, context, fn));
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function withPostgresSettings(client, context, fn) {
+  const previousWorkspace = await currentSetting(client, "app.workspace_id");
+  const previousBypass = await currentSetting(client, "app.rls_bypass");
+  await client.query("SELECT set_config('app.workspace_id', $1, true)", [context.workspaceId || ""]);
+  await client.query("SELECT set_config('app.rls_bypass', $1, true)", [context.bypass ? "1" : "0"]);
+  try {
+    return await fn();
+  } finally {
+    await client.query("SELECT set_config('app.workspace_id', $1, true)", [previousWorkspace || ""]);
+    await client.query("SELECT set_config('app.rls_bypass', $1, true)", [previousBypass || "0"]);
+  }
+}
+
+async function currentSetting(client, name) {
+  const result = await client.query("SELECT current_setting($1, true) AS value", [name]);
+  return result.rows[0]?.value || "";
 }
 
 function toPostgresSql(sql) {

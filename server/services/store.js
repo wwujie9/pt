@@ -57,8 +57,7 @@ export async function saveResources(resources, workspaceId = "default") {
       CURRENT_TIMESTAMP
     )
   `);
-  await db.exec("BEGIN");
-  try {
+  await db.transaction(async () => {
     await db.prepare("DELETE FROM resources WHERE workspace_id = ?").run(workspaceId);
     for (const resource of resources) {
       await replace.run(
@@ -72,11 +71,7 @@ export async function saveResources(resources, workspaceId = "default") {
         scopedKey(workspaceId, resource.id),
       );
     }
-    await db.exec("COMMIT");
-  } catch (error) {
-    await db.exec("ROLLBACK");
-    throw error;
-  }
+  });
 }
 
 export async function loadSources(workspaceId = "default") {
@@ -99,17 +94,12 @@ export async function saveSources(sources, workspaceId = "default") {
       CURRENT_TIMESTAMP
     )
   `);
-  await db.exec("BEGIN");
-  try {
+  await db.transaction(async () => {
     await db.prepare("DELETE FROM sources WHERE workspace_id = ?").run(workspaceId);
     for (const source of sources) {
       await replace.run(scopedKey(workspaceId, source.id), workspaceId, source.type, Boolean(source.enabled), JSON.stringify(source), scopedKey(workspaceId, source.id));
     }
-    await db.exec("COMMIT");
-  } catch (error) {
-    await db.exec("ROLLBACK");
-    throw error;
-  }
+  });
 }
 
 export async function loadSyncLogs(workspaceId = "default") {
