@@ -17,6 +17,18 @@ services:
     volumes:
       - pt-postgres-data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: pt-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   pt-resource-hub:
     build: .
     container_name: pt-resource-hub
@@ -45,10 +57,13 @@ services:
       PAYMENT_PROVIDER: "manual"
       DATABASE_DRIVER: "postgres"
       DATABASE_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"
+      REDIS_URL: "redis://redis:6379"
     volumes:
       - ./storage:/app/storage
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   pt-resource-worker:
@@ -65,12 +80,15 @@ services:
       CREDENTIAL_SECRET: "change-me-credential-secret"
       DATABASE_DRIVER: "postgres"
       DATABASE_URL: "postgres://pt:pt_password@postgres:5432/pt_resource_hub"
+      REDIS_URL: "redis://redis:6379"
       WORKER_ID: "worker-compose"
       WORKER_INTERVAL_MS: "3000"
     volumes:
       - ./storage:/app/storage
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

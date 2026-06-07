@@ -15,6 +15,8 @@
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:e2e": "node scripts/e2e-saas.mjs",
     "backup": "node scripts/backup.mjs",
+    "backup:postgres": "node scripts/postgres-backup.mjs",
+    "backup:postgres:restore": "node scripts/postgres-restore-drill.mjs",
     "db:migrations": "node --no-warnings scripts/check-migrations.mjs"
   },
   "engines": {

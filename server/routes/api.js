@@ -1,4 +1,4 @@
-import { badRequest, json, notFound, readJsonBody } from "../lib/http.js";
+import { badRequest, json, notFound, readJsonBody, readRawBody } from "../lib/http.js";
 import { getAuthContext, isPlatformAdmin, requireAdmin, requirePermission, requirePlatformAdmin } from "../lib/auth.js";
 import { getMedia, getStats, listMedia, listResources } from "../services/catalog.js";
 import { loadSyncLogs } from "../services/store.js";
@@ -30,7 +30,7 @@ import {
 } from "../services/auth.js";
 import { sendInvitationEmail } from "../services/email.js";
 import { runBackupJob, runHealthJob } from "../services/jobs.js";
-import { changePlan, createCheckoutSession, getPlan, getUsage, listBillingEvents, listPlans } from "../services/billing.js";
+import { changePlan, createCheckoutSession, getPlan, getUsage, handlePaymentWebhook, listBillingEvents, listPlans } from "../services/billing.js";
 import {
   enqueueDownloadTask,
   listDownloadClients,
@@ -120,6 +120,23 @@ export async function handleApi(req, res, url) {
         targetId: user.id,
       });
       return json(res, 200, { ok: true, user });
+    } catch (error) {
+      return badRequest(res, error.message);
+    }
+  }
+
+  const paymentWebhookMatch = url.pathname.match(/^\/api\/billing\/webhooks\/([^/]+)$/);
+  if (req.method === "POST" && paymentWebhookMatch) {
+    try {
+      const result = await handlePaymentWebhook(paymentWebhookMatch[1], await readRawBody(req), req.headers);
+      await appendAuditLog({
+        workspaceId: result.event.workspaceId,
+        action: "billing.webhook",
+        targetType: "billing_event",
+        targetId: result.event.providerEventId,
+        payload: result.event,
+      });
+      return json(res, 200, result);
     } catch (error) {
       return badRequest(res, error.message);
     }
@@ -556,6 +573,7 @@ function needsPlatformAdmin(req, url) {
 }
 
 function requiredPermission(req, url) {
+  if (url.pathname.startsWith("/api/billing/webhooks/")) return null;
   if (url.pathname.startsWith("/api/billing/") && req.method !== "GET") return "billing:write";
   if (url.pathname.startsWith("/api/sources") && req.method === "GET") return "source:read";
   if (/^\/api\/sources\/[^/]+\/(test|caps)$/.test(url.pathname)) return "source:test";
@@ -578,6 +596,7 @@ function currentWorkspaceId(req, authContext) {
 function shouldValidateWorkspace(req, url) {
   if (url.pathname.startsWith("/api/auth/")) return false;
   if (url.pathname === "/api/invitations/accept") return false;
+  if (url.pathname.startsWith("/api/billing/webhooks/")) return false;
   if (url.pathname === "/api/workspaces" && req.method === "POST") return false;
   if (url.pathname === "/api/billing/plans") return false;
   return true;
@@ -590,6 +609,7 @@ function requireAuthenticated(req, url, authContext) {
   if (url.pathname === "/api/auth/login") return null;
   if (url.pathname === "/api/invitations/accept") return null;
   if (url.pathname === "/api/billing/plans") return null;
+  if (url.pathname.startsWith("/api/billing/webhooks/")) return null;
   if (url.pathname === "/api/health") return null;
   return { error: "需要登录" };
 }

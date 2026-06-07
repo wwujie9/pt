@@ -16,11 +16,15 @@ export function badRequest(res, message) {
 }
 
 export async function readJsonBody(req) {
+  const text = await readRawBody(req);
+  return text ? JSON.parse(text) : {};
+}
+
+export async function readRawBody(req) {
   const chunks = [];
   for await (const chunk of req) {
     chunks.push(chunk);
   }
 
-  const text = Buffer.concat(chunks).toString("utf8").trim();
-  return text ? JSON.parse(text) : {};
+  return Buffer.concat(chunks).toString("utf8").trim();
 }

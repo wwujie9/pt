@@ -5,6 +5,8 @@
 - 固定端口 `4273`。
 - SQLite 本地开发持久化：`storage/app.db`。
 - PostgreSQL 生产 runtime adapter、Docker PostgreSQL 与生产 compose。
+- PostgreSQL 版本化 migrations 目录与生产索引迁移。
+- Redis 多实例共享限流。
 - 管理员登录与会话 Token。
 - RBAC 角色：`admin`、`operator`、`viewer`。
 - 敏感接口默认需要管理员身份。
@@ -33,6 +35,10 @@
 - 手动文件级备份脚本。
 - 可选后台来源健康检查调度。
 - 可选 Webhook 通知。
+- Resend / SMTP relay / Webhook 邀请邮件发送。
+- Stripe / Lemon Squeezy checkout 与签名 webhook。
+- PostgreSQL `pg_dump` 备份与恢复演练脚本。
+- Trivy 镜像扫描与 Dependabot。
 
 ## 生产环境变量
 
@@ -267,9 +273,11 @@ npm run test:smoke
 ## 仍建议后续增强
 
 - 邮件服务接入，发送真实邀请邮件。
-- 套餐支付网关和发票。
+- 邮件投递状态、退信处理和重试队列。
+- 支付发票、退款、webhook 重放和 sandbox 合同测试。
 - Worker 真实下载器协议执行、失败重试和死信队列。
 - 更完整的 TMDB 详情导入。
 - HTTPS 与域名部署自动化。
 - PostgreSQL Row Level Security。
 - 版本化迁移目录和回滚策略。
+- SBOM、镜像签名和对象存储归档。

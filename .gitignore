@@ -8,4 +8,5 @@ storage/*.db
 storage/*.db-shm
 storage/*.db-wal
 storage/backups/
+storage/postgres-backups/
 *.pid

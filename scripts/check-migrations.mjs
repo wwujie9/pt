@@ -14,6 +14,9 @@ const required = new Map([
   ["0008", "billing_usage"],
   ["0009", "worker_task_attempts"],
 ]);
+if (db.driver === "postgres") {
+  required.set("0010", "production_indexes");
+}
 const existing = new Set(rows.map((row) => row.version));
 const missing = [...required.keys()].filter((version) => !existing.has(version));
 const nameMismatch = rows.filter((row) => required.has(row.version) && required.get(row.version) !== row.name);

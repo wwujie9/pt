@@ -29,7 +29,7 @@ createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   setSecurityHeaders(res);
 
-  const limited = checkRateLimit(req, url);
+  const limited = await checkRateLimit(req, url);
   if (limited) {
     res.writeHead(429, {
       "content-type": "application/json; charset=utf-8",

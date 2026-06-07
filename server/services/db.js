@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -137,6 +137,7 @@ async function runMigrations() {
     await recordMigration("0007", "invitations");
     await recordMigration("0008", "billing_usage");
     await recordMigration("0009", "worker_task_attempts");
+    await runPostgresMigrationFiles();
     return;
   }
 
@@ -316,6 +317,25 @@ async function runMigrations() {
   await ensureColumn("tasks", "attempts", "INTEGER NOT NULL DEFAULT 0");
   await ensureColumn("tasks", "locked_at", "TEXT");
   await recordMigration("0009", "worker_task_attempts");
+}
+
+async function runPostgresMigrationFiles() {
+  const migrationsDir = resolve(root, "deploy/migrations/postgres");
+  if (!existsSync(migrationsDir)) return;
+  const files = readdirSync(migrationsDir)
+    .filter((file) => /^\d{4}_.+\.sql$/i.test(file))
+    .sort();
+  for (const file of files) {
+    const [version] = file.split("_");
+    if (await migrationApplied(version)) continue;
+    await db.exec(readFileSync(resolve(migrationsDir, file), "utf8"));
+    await recordMigration(version, file.replace(/^\d{4}_/, "").replace(/\.sql$/i, ""));
+  }
+}
+
+async function migrationApplied(version) {
+  const row = await db.prepare("SELECT version FROM schema_migrations WHERE version = ?").get(version);
+  return Boolean(row);
 }
 
 async function seedIfEmpty() {

@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { db } from "./db.js";
 
 const plans = {
@@ -89,19 +90,44 @@ export async function changePlan(workspaceId, planName, actor = null) {
 export async function createCheckoutSession(workspaceId, planName, actor = null) {
   if (!plans[planName]) throw new Error("套餐不正确");
   const provider = process.env.PAYMENT_PROVIDER || "manual";
+  const providerSession = await createProviderCheckout(provider, workspaceId, planName, actor);
   const event = await recordBillingEvent(workspaceId, "checkout.created", {
     provider,
     planName,
     actorId: actor?.id || null,
-    checkoutUrl: provider === "manual" ? `/admin/billing/manual?plan=${encodeURIComponent(planName)}` : "",
+    checkoutUrl: providerSession.checkoutUrl,
+    providerSessionId: providerSession.id,
   });
   return {
-    id: event.id,
+    id: providerSession.id || event.id,
     provider,
     planName,
     checkoutUrl: event.payload.checkoutUrl,
     status: event.status,
   };
+}
+
+export async function handlePaymentWebhook(provider, rawBody, headers = {}) {
+  const payload = parseAndVerifyWebhook(provider, rawBody, headers);
+  const normalized = normalizePaymentEvent(provider, payload);
+  if (!normalized.workspaceId) throw new Error("支付事件缺少 workspaceId");
+
+  await recordBillingEvent(normalized.workspaceId, normalized.type, {
+    provider,
+    providerEventId: normalized.providerEventId,
+    providerSessionId: normalized.providerSessionId,
+    planName: normalized.planName,
+    status: normalized.status,
+    amountCents: normalized.amountCents,
+    currency: normalized.currency,
+    raw: payload,
+  });
+
+  if (normalized.status === "paid" && normalized.planName) {
+    await changePlan(normalized.workspaceId, normalized.planName, { id: `payment:${provider}` });
+  }
+
+  return { ok: true, provider, event: normalized };
 }
 
 export async function recordBillingEvent(workspaceId, type, payload = {}) {
@@ -144,4 +170,144 @@ function parsePayload(payload) {
 
 function countValue(row) {
   return Number(row?.count || 0);
+}
+
+async function createProviderCheckout(provider, workspaceId, planName, actor) {
+  if (provider === "stripe") return createStripeCheckout(workspaceId, planName, actor);
+  if (provider === "lemon") return createLemonCheckout(workspaceId, planName, actor);
+  return {
+    id: "",
+    checkoutUrl: `/admin/billing/manual?plan=${encodeURIComponent(planName)}`,
+  };
+}
+
+async function createStripeCheckout(workspaceId, planName, actor) {
+  const secretKey = requiredEnv("STRIPE_SECRET_KEY", "Stripe checkout 需要 STRIPE_SECRET_KEY");
+  const priceId = requiredEnv(`STRIPE_PRICE_${planName.toUpperCase()}`, `Stripe checkout 需要 STRIPE_PRICE_${planName.toUpperCase()}`);
+  const appUrl = process.env.PUBLIC_APP_URL || `http://127.0.0.1:${process.env.PORT || 4273}`;
+  const params = new URLSearchParams({
+    mode: "subscription",
+    success_url: `${appUrl}/?billing=success&plan=${encodeURIComponent(planName)}`,
+    cancel_url: `${appUrl}/?billing=cancelled&plan=${encodeURIComponent(planName)}`,
+    "line_items[0][price]": priceId,
+    "line_items[0][quantity]": "1",
+    "metadata[workspaceId]": workspaceId,
+    "metadata[planName]": planName,
+    "metadata[actorId]": actor?.id || "",
+    client_reference_id: workspaceId,
+  });
+  const response = await fetch("https://api.stripe.com/v1/checkout/sessions", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${secretKey}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: params,
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error?.message || `Stripe checkout 失败：HTTP ${response.status}`);
+  return { id: body.id, checkoutUrl: body.url };
+}
+
+async function createLemonCheckout(workspaceId, planName, actor) {
+  const apiKey = requiredEnv("LEMON_API_KEY", "Lemon Squeezy checkout 需要 LEMON_API_KEY");
+  const storeId = requiredEnv("LEMON_STORE_ID", "Lemon Squeezy checkout 需要 LEMON_STORE_ID");
+  const variantId = requiredEnv(`LEMON_VARIANT_${planName.toUpperCase()}`, `Lemon Squeezy checkout 需要 LEMON_VARIANT_${planName.toUpperCase()}`);
+  const response = await fetch("https://api.lemonsqueezy.com/v1/checkouts", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${apiKey}`,
+      accept: "application/vnd.api+json",
+      "content-type": "application/vnd.api+json",
+    },
+    body: JSON.stringify({
+      data: {
+        type: "checkouts",
+        attributes: {
+          checkout_data: {
+            custom: {
+              workspaceId,
+              planName,
+              actorId: actor?.id || "",
+            },
+          },
+        },
+        relationships: {
+          store: { data: { type: "stores", id: storeId } },
+          variant: { data: { type: "variants", id: variantId } },
+        },
+      },
+    }),
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.errors?.[0]?.detail || `Lemon Squeezy checkout 失败：HTTP ${response.status}`);
+  return { id: body.data?.id, checkoutUrl: body.data?.attributes?.url };
+}
+
+function parseAndVerifyWebhook(provider, rawBody, headers) {
+  if (provider === "stripe") {
+    verifyStripeSignature(rawBody, header(headers, "stripe-signature"));
+  }
+  if (provider === "lemon") {
+    verifyHmacSignature(rawBody, header(headers, "x-signature"), requiredEnv("LEMON_WEBHOOK_SECRET", "Lemon webhook 需要 LEMON_WEBHOOK_SECRET"));
+  }
+  return rawBody ? JSON.parse(rawBody) : {};
+}
+
+function verifyStripeSignature(rawBody, signatureHeader) {
+  const secret = requiredEnv("STRIPE_WEBHOOK_SECRET", "Stripe webhook 需要 STRIPE_WEBHOOK_SECRET");
+  const parts = Object.fromEntries(String(signatureHeader || "").split(",").map((part) => part.split("=")));
+  if (!parts.t || !parts.v1) throw new Error("Stripe webhook 签名缺失");
+  verifyHmacSignature(`${parts.t}.${rawBody}`, parts.v1, secret);
+}
+
+function verifyHmacSignature(payload, signature, secret) {
+  const expected = createHmac("sha256", secret).update(payload).digest("hex");
+  const actual = String(signature || "");
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(actual);
+  if (expectedBuffer.length !== actualBuffer.length || !timingSafeEqual(expectedBuffer, actualBuffer)) {
+    throw new Error("支付 webhook 签名校验失败");
+  }
+}
+
+function normalizePaymentEvent(provider, payload) {
+  if (provider === "stripe") {
+    const object = payload.data?.object || {};
+    return {
+      providerEventId: payload.id,
+      providerSessionId: object.id,
+      type: `payment.${payload.type || "stripe"}`,
+      workspaceId: object.metadata?.workspaceId || object.client_reference_id,
+      planName: object.metadata?.planName,
+      status: payload.type === "checkout.session.completed" ? "paid" : object.payment_status || "recorded",
+      amountCents: object.amount_total || 0,
+      currency: String(object.currency || "USD").toUpperCase(),
+    };
+  }
+  if (provider === "lemon") {
+    const attributes = payload.data?.attributes || {};
+    const custom = attributes.custom_data || attributes.first_order_item?.custom_data || {};
+    return {
+      providerEventId: payload.meta?.event_id || payload.data?.id,
+      providerSessionId: payload.data?.id,
+      type: `payment.${payload.meta?.event_name || "lemon"}`,
+      workspaceId: custom.workspaceId,
+      planName: custom.planName,
+      status: String(payload.meta?.event_name || "").includes("order_created") ? "paid" : "recorded",
+      amountCents: attributes.total || 0,
+      currency: attributes.currency || "USD",
+    };
+  }
+  throw new Error(`不支持的支付 provider：${provider}`);
+}
+
+function header(headers, name) {
+  return headers[name] || headers[name.toLowerCase()];
+}
+
+function requiredEnv(name, message) {
+  const value = process.env[name];
+  if (!value) throw new Error(message);
+  return value;
 }

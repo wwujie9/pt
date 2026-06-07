@@ -38,6 +38,12 @@
 - 烟测脚本。
 - SaaS E2E 脚本与 GitHub Actions CI。
 - PostgreSQL runtime adapter、迁移路径与生产 schema。
+- PostgreSQL 版本化 migrations 目录。
+- Stripe / Lemon Squeezy checkout 与签名 webhook。
+- Resend / SMTP relay / webhook 邮件 provider。
+- PostgreSQL `pg_dump` 备份与恢复演练脚本。
+- Redis 多实例共享限流。
+- Trivy 镜像安全扫描与 Dependabot。
 
 ## 启动
 
@@ -121,6 +127,7 @@ docker compose --env-file .env.production -f deploy/docker-compose.prod.yml up -
 ```
 
 完整风险清单、CI/CD 和发布步骤见 `docs/risk-and-deployment-plan.md`。
+高级生产能力启用步骤见 `docs/advanced-production-capabilities.md`。
 
 ## 烟测
 

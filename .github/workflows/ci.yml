@@ -90,6 +90,15 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -119,6 +128,7 @@ jobs:
           ADMIN_EMAIL=admin@example.local \
           ADMIN_PASSWORD=admin123456 \
           CREDENTIAL_SECRET=ci-secret-at-least-32-characters \
+          REDIS_URL=redis://127.0.0.1:6379 \
           PUBLIC_APP_URL=http://127.0.0.1:4273 \
           node --no-warnings server/index.js &
           echo $! > server.pid
@@ -148,6 +158,7 @@ jobs:
         env:
           DATABASE_DRIVER: postgres
           DATABASE_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+          REDIS_URL: redis://127.0.0.1:6379
           CREDENTIAL_SECRET: ci-secret-at-least-32-characters
           WORKER_RUN_ONCE: "1"
 
@@ -171,3 +182,11 @@ jobs:
 
       - name: Build image
         run: docker build -t pt-resource-hub:ci .
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: pt-resource-hub:ci
+          format: table
+          severity: CRITICAL,HIGH
+          exit-code: "1"

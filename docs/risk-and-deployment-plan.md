@@ -10,14 +10,14 @@
 |---|---|---|---|
 | 密钥进入仓库或镜像 | 管理员、数据库、来源凭据泄露 | `.gitignore` / `.dockerignore` 已排除 `.env.production`、数据库和备份 | 生产启用 GitHub secret scanning 与服务器密钥轮换制度 |
 | PostgreSQL 与 SQLite 方言差异 | 线上运行时与本地测试不一致 | CI 同时跑 SQLite 与 PostgreSQL E2E | 后续新增专门 SQL adapter 单元测试 |
-| 迁移机制仍偏轻量 | 大版本 schema 变更缺少回滚和分阶段发布 | `schema_migrations` 记录与 `deploy/postgres-schema.sql` 幂等建表 | 引入版本化迁移目录，如 `deploy/migrations/*.sql`，支持 up/down 和锁表 |
+| 迁移机制仍偏轻量 | 大版本 schema 变更缺少回滚和分阶段发布 | 已增加 `deploy/migrations/postgres/*.sql` 版本化执行 | 后续补 up/down、迁移锁和回滚演练 |
 | Worker 长驻进程难以 CI 验证 | 队列代码可能只在 API 层可见 | 新增 `WORKER_RUN_ONCE=1`，CI 可单次验证 | 接入真实 qBittorrent / Transmission 后增加集成测试容器 |
-| 支付仍是 manual provider | 商业闭环不完整 | 已有 checkout / billing event / plan change 抽象 | 接 Stripe / Lemon Squeezy / Paddle webhook 并验证签名 |
-| 邮件发送仍依赖 webhook | 邀请交付受外部 webhook 影响 | 已有 invitation token、过期、一次性使用 | 接 SMTP / Resend / Postmark provider，并记录投递状态 |
-| 生产备份缺少自动恢复演练 | 数据丢失后恢复不确定 | 文件级 backup 脚本与 workspace backup API | 增加 PostgreSQL `pg_dump` 定时备份和月度恢复演练 |
+| 支付 provider 配置错误 | 用户付款后套餐不同步 | 已支持 Stripe / Lemon Squeezy checkout 与签名 webhook | 增加 sandbox 合同测试和 webhook 重放工具 |
+| 邮件 provider 配置错误 | 邀请邮件投递失败 | 已支持 Resend / SMTP relay / generic webhook | 增加投递状态表和重试队列 |
+| 生产备份未演练 | 数据丢失后恢复不确定 | 已增加 PostgreSQL `pg_dump` 备份与恢复演练脚本 | 增加定时备份、对象存储归档和恢复 SLA |
 | 多租户隔离依赖服务层过滤 | SQL 漏写 workspace 条件会造成串租户 | E2E 已覆盖关键 workspace 隔离路径 | 增加 PostgreSQL Row Level Security 作为第二道防线 |
-| 速率限制为进程内存 | 多副本部署时限流不共享 | 当前单实例可用 | 多实例时迁移到 Redis limiter |
-| 容器镜像供应链 | 基础镜像和依赖可能有 CVE | CI 可构建镜像 | 增加 Trivy / Dependabot 扫描 |
+| Redis 限流不可用 | 多副本限流降级到单实例内存 | 已支持 `REDIS_URL`，不可用时降级进程内限流 | 生产监控 Redis 健康与限流错误率 |
+| 容器镜像供应链 | 基础镜像和依赖可能有 CVE | 已增加 Trivy / Dependabot | 后续增加 SBOM 和镜像签名 |
 
 ## 标准部署架构
 
@@ -49,10 +49,12 @@ flowchart LR
 - SQLite `npm run db:migrations`
 - SQLite smoke / SaaS E2E
 - PostgreSQL service 容器
+- Redis service 容器
 - PostgreSQL `npm run db:migrations`
 - PostgreSQL smoke / SaaS E2E
 - PostgreSQL worker 单次消费验证
 - Docker image build
+- Trivy 镜像安全扫描
 
 ## CD 流程
 
@@ -136,10 +138,10 @@ DEPLOY_PATH=/opt/pt
 
 ## 后续增强优先级
 
-1. 版本化数据库迁移目录，替换当前启动时幂等建表。
-2. PostgreSQL Row Level Security。
-3. SMTP / Resend / Postmark 邮件 provider。
-4. Stripe / Paddle 支付 webhook 和发票。
-5. Redis 限流、任务队列锁和多 worker 横向扩展。
-6. Trivy 镜像扫描与 Dependabot。
-7. 自动 `pg_dump` 备份、对象存储归档、恢复演练脚本。
+1. 请求级事务封装和 `SET LOCAL app.workspace_id`，再生产启用 RLS。
+2. 迁移锁、down migration 和回滚演练。
+3. 支付 sandbox 合同测试、发票和退款流程。
+4. 邮件投递状态表、重试队列和退信处理。
+5. Redis 任务队列锁和多 worker 横向扩展。
+6. SBOM、镜像签名和发布准入策略。
+7. 自动对象存储归档和恢复 SLA 演练。
