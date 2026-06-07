@@ -42,6 +42,26 @@ export async function fetchBillingEvents() {
   return request("/api/billing/events");
 }
 
+export async function fetchBillingInvoices() {
+  return request("/api/billing/invoices");
+}
+
+export async function createRefund(refund) {
+  return request("/api/billing/refunds", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(refund),
+  });
+}
+
+export async function replayBillingWebhook(eventId) {
+  return request("/api/billing/webhook-replays", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ eventId }),
+  });
+}
+
 export async function changeBillingPlan(plan) {
   return request("/api/billing/plan", {
     method: "POST",
@@ -72,6 +92,14 @@ export async function testDownloadClient(id) {
 
 export async function fetchTasks() {
   return request("/api/tasks");
+}
+
+export async function fetchMonitoring() {
+  return request("/api/monitoring");
+}
+
+export async function runMonitoring() {
+  return request("/api/jobs/monitoring", { method: "POST" });
 }
 
 export async function createTask(task) {

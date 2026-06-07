@@ -2,9 +2,29 @@
 
 一个面向授权 PT / Torznab / Jackett / Prowlarr / RSS / 私有库的媒体资源索引与管理工作台。
 
+## 推广定位
+
+当前版本已经可以作为“生产 SaaS 试点版”对外演示和小范围试运行。它不是单纯静态目录页，而是包含资源聚合、租户隔离、用户邀请、套餐限制、支付运营、任务队列、备份恢复和监控告警的一整套后台工作台。
+
+适合推广时强调：
+
+- 面向授权来源的统一资源发现与审核。
+- Prowlarr / Jackett / Torznab / RSS 等来源适配能力。
+- Workspace 级数据隔离与 PostgreSQL RLS 第二道防线。
+- Starter / Team / Business 套餐限制和支付 webhook 自动同步。
+- 下载器联动、任务队列和独立 worker。
+- PostgreSQL 备份、对象归档、恢复 SLA 演练和生产监控。
+- GitHub Actions CI、Docker 镜像构建、Trivy 安全扫描和生产 compose。
+
+建议推广节奏：
+
+- 对客户演示：使用本地或预发环境，登录 `#/admin` 展示运营控制台、来源管理、Workspace、邀请、套餐、支付运营和监控。
+- 小范围试点：使用 PostgreSQL + Redis + worker + RLS + HTTPS，先接入客户已有授权来源。
+- 正式上线：接入真实邮件、支付 sandbox 验证、对象存储备份、监控 webhook 和定期恢复演练。
+
 ## 当前交付状态
 
-当前版本是客户可试用版，已经具备：
+当前版本已经具备：
 
 - 固定端口 `4273`。
 - SQLite 本地数据库：`storage/app.db`，生产推荐 PostgreSQL。
@@ -47,6 +67,7 @@
 - 恢复 SLA 演练指标。
 - 支付发票查询、退款记录、webhook 重放和 sandbox 合同测试。
 - 备份生命周期策略与生产监控告警。
+- 管理页运营控制台：监控健康、备份新鲜度、任务总量、发票、退款、webhook 重放。
 - Redis 多实例共享限流。
 - Trivy 镜像安全扫描与 Dependabot。
 
@@ -167,6 +188,13 @@ SELECT * FROM schema_migrations;
 
 ```powershell
 npm run db:migrations
+```
+
+生产运营检查：
+
+```powershell
+npm run monitoring:check
+npm run backup:lifecycle
 ```
 
 反向代理模板：

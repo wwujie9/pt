@@ -18,6 +18,7 @@
 | 多租户隔离依赖服务层过滤 | SQL 漏写 workspace 条件会造成串租户 | E2E 已覆盖关键 workspace 隔离路径 | 增加 PostgreSQL Row Level Security 作为第二道防线 |
 | Redis 限流不可用 | 多副本限流降级到单实例内存 | 已支持 `REDIS_URL`，不可用时降级进程内限流 | 生产监控 Redis 健康与限流错误率 |
 | 容器镜像供应链 | 基础镜像和依赖可能有 CVE | 已增加 Trivy / Dependabot | 后续增加 SBOM 和镜像签名 |
+| 推广演示只看到 API 能力 | 客户难以感知 SaaS 运营价值 | 管理页已增加运营控制台、支付运营、生产监控和备份状态 | 后续补客户 onboarding 向导和仪表盘截图 |
 
 ## 标准部署架构
 
@@ -53,6 +54,10 @@ flowchart LR
 - PostgreSQL `npm run db:migrations`
 - PostgreSQL smoke / SaaS E2E
 - PostgreSQL worker 单次消费验证
+- 支付 sandbox 合同测试：发票、退款记录、webhook 重放
+- PostgreSQL 备份、对象归档、恢复 SLA 演练
+- 备份生命周期策略 dry-run
+- 生产监控检查
 - Docker image build
 - Trivy 镜像安全扫描
 
@@ -133,15 +138,16 @@ DEPLOY_PATH=/opt/pt
 - 反向代理已启用 HTTPS。
 - `/api/health` 返回 `ok: true`。
 - 管理员登录成功。
+- 管理页运营控制台显示健康状态、最近备份和任务队列。
+- 支付运营区能查询发票，预发环境可执行 webhook 重放和退款记录。
 - 创建 workspace、邀请用户、来源数量限制、下载任务队列已在预发验证。
 - 已执行一次备份和一次恢复演练。
 
 ## 后续增强优先级
 
-1. 请求级事务封装和 `SET LOCAL app.workspace_id`，再生产启用 RLS。
-2. 迁移锁、down migration 和回滚演练。
-3. 支付 sandbox 合同测试、发票和退款流程。
-4. 邮件投递状态表、重试队列和退信处理。
-5. Redis 任务队列锁和多 worker 横向扩展。
-6. SBOM、镜像签名和发布准入策略。
-7. 自动对象存储归档和恢复 SLA 演练。
+1. 客户 onboarding 向导：创建 workspace、邀请首个用户、添加第一个来源、跑首次同步。
+2. 邮件投递状态表、重试队列和退信处理。
+3. Redis 任务队列锁和多 worker 横向扩展。
+4. 迁移锁、down migration 和回滚演练。
+5. SBOM、镜像签名和发布准入策略。
+6. 业务指标仪表盘：活跃租户、来源成功率、同步成功率、付费转化和退款率。

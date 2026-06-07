@@ -9,12 +9,17 @@ import {
   fetchWorkspaces,
   fetchBillingCurrent,
   fetchBillingEvents,
+  fetchBillingInvoices,
   fetchBillingPlans,
+  createRefund,
+  replayBillingWebhook,
   changeBillingPlan,
   fetchDownloadClients,
   saveDownloadClient,
   testDownloadClient,
   fetchTasks,
+  fetchMonitoring,
+  runMonitoring,
   createTask,
   rerunTask,
   createWorkspace,
@@ -99,7 +104,7 @@ async function renderRoute() {
 
   if (hash === "#/admin") {
     view.innerHTML = `<section class="loading">正在读取来源状态...</section>`;
-    const [adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, invitations, downloadClients, tasks] = await Promise.all([
+    const [adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks] = await Promise.all([
       fetchSources().catch(() => []),
       fetchSyncLogs().catch(() => []),
       fetchReviewResources().catch(() => []),
@@ -110,11 +115,13 @@ async function renderRoute() {
       fetchBillingCurrent().catch(() => null),
       fetchBillingPlans().catch(() => []),
       fetchBillingEvents().catch(() => []),
+      fetchBillingInvoices().catch(() => []),
+      fetchMonitoring().catch(() => null),
       fetchInvitations().catch(() => []),
       fetchDownloadClients().catch(() => []),
       fetchTasks().catch(() => []),
     ]);
-    view.innerHTML = renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, invitations, downloadClients, tasks });
+    view.innerHTML = renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks });
     bindAdminEvents();
     return;
   }
@@ -140,6 +147,7 @@ function bindAdminEvents() {
     output.hidden = false;
     output.textContent = error?.message || String(error);
   };
+  document.querySelector("#adminRefreshButton")?.addEventListener("click", () => renderRoute());
   const tokenInput = document.querySelector("#adminToken");
   tokenInput.value = localStorage.getItem("adminToken") || "";
   tokenInput.addEventListener("change", () => {
@@ -289,6 +297,43 @@ function bindAdminEvents() {
     });
   });
 
+  document.querySelector("#monitoringRunButton")?.addEventListener("click", async () => {
+    try {
+      await runMonitoring();
+      await renderRoute();
+    } catch (error) {
+      showAdminError(error);
+    }
+  });
+
+  document.querySelectorAll("[data-replay-webhook]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await replayBillingWebhook(button.dataset.replayWebhook);
+        await renderRoute();
+      } catch (error) {
+        showAdminError(error);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-refund-invoice]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const amount = prompt("请输入退款金额，单位为分；留空则按原账单金额记录");
+      if (amount === null) return;
+      try {
+        await createRefund({
+          billingEventId: button.dataset.refundInvoice,
+          amountCents: amount.trim() ? Number(amount) : undefined,
+          reason: "requested_by_customer",
+        });
+        await renderRoute();
+      } catch (error) {
+        showAdminError(error);
+      }
+    });
+  });
+
   document.querySelectorAll("[data-user-role]").forEach((select) => {
     select.addEventListener("change", async () => {
       try {
@@ -378,6 +423,7 @@ function bindAdminEvents() {
 
   document.querySelectorAll("[data-delete-source]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (!confirm(`确认删除来源 ${button.dataset.deleteSource}？`)) return;
       await deleteSource(button.dataset.deleteSource);
       await renderRoute();
     });

@@ -167,36 +167,36 @@ export function renderArchitecture() {
     <section class="architecture">
       <div class="section-head">
         <h1>架构分层</h1>
-        <span>可从静态原型迁移到 Next.js / API 服务</span>
+        <span>生产 SaaS 分层与运营闭环</span>
       </div>
       <div class="layer-map">
         ${layer("Presentation UI", "页面渲染、筛选控件、表格、详情页", "src/ui")}
-        ${layer("Application Services", "目录查询、资源聚合、状态编排", "src/services")}
+        ${layer("Application Services", "目录查询、资源聚合、状态编排、运营监控", "src/services")}
         ${layer("Domain", "搜索匹配、标题解析、资源排序评分", "src/domain")}
-        ${layer("Adapters", "TMDB、内部资源源、授权索引、公共源", "src/adapters")}
-        ${layer("Data", "seed 数据；后续替换为 PostgreSQL / Prisma", "src/data")}
+        ${layer("Adapters", "TMDB、Torznab、RSS、下载器、支付和邮件 provider", "src/adapters")}
+        ${layer("Data", "PostgreSQL RLS、Redis、对象归档、审计与备份恢复", "server/services")}
       </div>
       <div class="flow">
-        <div>TMDB Metadata</div>
+        <div>Tenant Context</div>
         <span></span>
         <div>Media Catalog</div>
         <span></span>
         <div>Source Adapters</div>
         <span></span>
-        <div>Ranking Engine</div>
+        <div>Billing & Worker</div>
         <span></span>
-        <div>Resource Table</div>
+        <div>Monitoring</div>
       </div>
     </section>
   `;
 }
 
-export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, invitations, downloadClients, tasks }) {
+export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks }) {
   return `
     <section class="admin">
       <div class="section-head">
-        <h1>来源管理</h1>
-        <a class="icon-button" href="#/admin" title="刷新状态">${icons.refresh}</a>
+        <h1>运营控制台</h1>
+        <button id="adminRefreshButton" class="icon-button" type="button" title="刷新状态">${icons.refresh}</button>
       </div>
       <div class="admin-token">
         <label>管理员令牌</label>
@@ -228,6 +228,54 @@ export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, au
         <input name="newPassword" type="password" placeholder="新密码，至少 8 位" />
         <button class="primary-button" type="submit">修改</button>
       </form>
+      <section class="ops-dashboard">
+        <article>
+          <strong class="${monitoring?.ok === false ? "danger-text" : "success-text"}">${monitoring?.ok === false ? "告警" : "健康"}</strong>
+          <span>生产监控</span>
+        </article>
+        <article>
+          <strong>${monitoring?.metrics?.backup?.latestAgeHours == null ? "-" : formatHours(monitoring.metrics.backup.latestAgeHours)}</strong>
+          <span>最近备份</span>
+        </article>
+        <article>
+          <strong>${monitoring?.metrics?.tasks ? Object.values(monitoring.metrics.tasks).reduce((sum, value) => sum + Number(value || 0), 0) : tasks?.length || 0}</strong>
+          <span>任务总量</span>
+        </article>
+        <article>
+          <strong>${billingInvoices?.length || 0}</strong>
+          <span>发票记录</span>
+        </article>
+      </section>
+      <div class="admin-grid">
+        <section class="admin-panel">
+          <div class="panel-heading">
+            <h2>生产监控</h2>
+            <button id="monitoringRunButton" type="button">立即检查</button>
+          </div>
+          ${renderMonitoring(monitoring)}
+        </section>
+        <section class="admin-panel">
+          <h2>支付运营</h2>
+          <div class="log-list">
+            ${(billingInvoices || [])
+              .slice(0, 6)
+              .map(
+                (invoice) => `
+                  <article>
+                    <strong>${escapeHtml(invoice.provider)} · ${escapeHtml(invoice.status)}</strong>
+                    <span>${money(invoice.amountCents, invoice.currency)} · ${escapeHtml(invoice.planName || "未绑定套餐")} · ${escapeHtml(invoice.createdAt || "")}</span>
+                    <div class="inline-actions">
+                      ${invoice.invoiceUrl ? `<a class="small-action" href="${escapeHtml(invoice.invoiceUrl)}" target="_blank" rel="noreferrer">发票</a>` : ""}
+                      ${invoice.invoicePdf ? `<a class="small-action" href="${escapeHtml(invoice.invoicePdf)}" target="_blank" rel="noreferrer">PDF</a>` : ""}
+                      <button data-refund-invoice="${escapeHtml(invoice.id)}">退款</button>
+                    </div>
+                  </article>
+                `,
+              )
+              .join("") || `<p class="muted">暂无发票记录。</p>`}
+          </div>
+        </section>
+      </div>
       <form id="sourceForm" class="source-form">
         <div>
           <label>来源 ID</label>
@@ -390,7 +438,13 @@ export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, au
               <strong>当前用量</strong>
               <span>用户 ${billing?.usage?.users ?? 0} · 邀请 ${billing?.usage?.pendingInvitations ?? 0} · 来源 ${billing?.usage?.sources ?? 0} · 任务 ${billing?.usage?.tasks ?? 0}</span>
             </article>
-            ${(billingEvents || []).slice(0, 4).map((event) => `<article><strong>${escapeHtml(event.type)}</strong><span>${escapeHtml(event.status)} · ${escapeHtml(event.createdAt || "")}</span></article>`).join("")}
+            ${(billingEvents || []).slice(0, 6).map((event) => `
+              <article>
+                <strong>${escapeHtml(event.type)}</strong>
+                <span>${escapeHtml(event.status)} · ${escapeHtml(event.createdAt || "")}</span>
+                ${event.payload?.raw ? `<div class="inline-actions"><button data-replay-webhook="${escapeHtml(event.id)}">重放 webhook</button></div>` : ""}
+              </article>
+            `).join("")}
           </div>
         </section>
         <section class="admin-panel">
@@ -577,6 +631,44 @@ function permissionRow(role, desc) {
       <span>${desc}</span>
     </article>
   `;
+}
+
+function renderMonitoring(monitoring) {
+  if (!monitoring) return `<p class="muted">登录平台管理员后可查看生产监控。</p>`;
+  const alerts = monitoring.alerts || [];
+  return `
+    <div class="monitoring-summary">
+      <span class="${monitoring.ok ? "status online" : "status danger"}">${monitoring.ok ? "healthy" : "alerting"}</span>
+      <span>检查时间 ${escapeHtml(monitoring.checkedAt || "-")}</span>
+    </div>
+    <div class="log-list">
+      <article>
+        <strong>数据库与备份</strong>
+        <span>${escapeHtml(monitoring.metrics?.driver || "-")} · 最新备份 ${monitoring.metrics?.backup?.latestAgeHours == null ? "-" : formatHours(monitoring.metrics.backup.latestAgeHours)} · 文件 ${monitoring.metrics?.backup?.fileCount ?? 0}</span>
+      </article>
+      <article>
+        <strong>任务队列</strong>
+        <span>${Object.entries(monitoring.metrics?.tasks || {}).map(([key, value]) => `${key} ${value}`).join(" · ") || "暂无任务"}</span>
+      </article>
+      <article>
+        <strong>来源健康</strong>
+        <span>失败 ${monitoring.metrics?.sources?.failed ?? 0} · 最近检查 ${escapeHtml(monitoring.metrics?.sources?.latestCheckedAt || "-")}</span>
+      </article>
+      ${alerts.map((alert) => `<article class="alert-row"><strong>${escapeHtml(alert.metric)}</strong><span>${escapeHtml(alert.message)} · ${escapeHtml(alert.value ?? "-")} / ${escapeHtml(alert.threshold ?? "-")}</span></article>`).join("")}
+    </div>
+  `;
+}
+
+function formatHours(hours) {
+  const value = Number(hours);
+  if (!Number.isFinite(value)) return "-";
+  if (value < 1) return `${Math.max(1, Math.round(value * 60))} 分钟`;
+  return `${value.toFixed(1)} 小时`;
+}
+
+function money(amountCents, currency = "USD") {
+  const amount = Number(amountCents || 0) / 100;
+  return `${currency} ${amount.toFixed(2)}`;
 }
 
 function option(value, label, current) {
