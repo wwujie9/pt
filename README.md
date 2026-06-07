@@ -234,12 +234,32 @@ npm run backup:lifecycle
 <script src="http://127.0.0.1:4273/embed.js?workspaceId=demo-workspace&limit=6&utm_campaign=existing-traffic"></script>
 ```
 
+支持三种展示模式：
+
+```html
+<!-- 海报网格，适合专题页或资源列表页 -->
+<script src="http://127.0.0.1:4273/embed.js?workspaceId=demo-workspace&mode=poster-grid&limit=6&utm_campaign=existing-traffic"></script>
+
+<!-- 列表模式，适合文章侧栏 -->
+<script src="http://127.0.0.1:4273/embed.js?workspaceId=demo-workspace&mode=list&limit=6&utm_campaign=existing-traffic"></script>
+
+<!-- 紧凑模式，适合导航下方、移动端模块或小广告位 -->
+<script src="http://127.0.0.1:4273/embed.js?workspaceId=demo-workspace&mode=compact&limit=4&utm_campaign=existing-traffic"></script>
+```
+
+也可以改标题和 CTA：
+
+```html
+<script src="http://127.0.0.1:4273/embed.js?workspaceId=demo-workspace&mode=list&title=今日资源榜&cta=前半年免费"></script>
+```
+
 嵌入脚本会自动：
 
 - 读取公开目录摘要：`GET /api/public/catalog`
 - 记录外部访问归因：`POST /api/growth/visit`
 - 记录广告展示 / 点击：`POST /api/public/ads/events`
 - 在后台“流量归因”面板展示来源站点、campaign、展示、点击和 CTR
+- 在后台“增长漏斗”展示访问、成员、来源、同步以及关键转化率
 
 默认广告不会强行开启：
 

@@ -307,6 +307,17 @@ await step("记录外部流量归因与广告事件", () => {
   assert(growth.campaigns.some((item) => item.campaign === `campaign-${runId}`), "未统计 UTM campaign");
   assert(growth.ads.impressions >= 1 && growth.ads.clicks >= 1, "未统计广告展示/点击");
   assert(String(growth.embed.script || "").includes("/embed.js"), "未生成嵌入代码");
+  assert(String(growth.embed.listScript || "").includes("mode=list"), "未生成列表模式嵌入代码");
+  assert(String(growth.embed.compactScript || "").includes("mode=compact"), "未生成紧凑模式嵌入代码");
+  assert(growth.funnel.visits >= 1, "漏斗未统计访问");
+  assert(growth.funnel.members >= 1, "漏斗未统计成员");
+  assert(growth.funnel.sources >= 3, "漏斗未统计来源");
+  assert(growth.funnel.syncs >= 0, "漏斗未返回同步指标");
+});
+
+const embedScriptStatus = await statusOnly(`/embed.js?workspaceId=${encodeURIComponent(workspace.id)}&mode=list&limit=2&utm_campaign=${runId}`);
+await step("外部站点嵌入脚本支持列表模式", () => {
+  assert(embedScriptStatus === 200, `embed.js 未返回 200，HTTP ${embedScriptStatus}`);
 });
 
 if (failed) {

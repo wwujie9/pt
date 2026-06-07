@@ -54,7 +54,7 @@ export async function trackTraffic(input = {}) {
 }
 
 export async function growthMetrics(workspaceId = "default") {
-  const [totals, campaigns, sites, adTotals] = await Promise.all([
+  const [totals, campaigns, sites, adTotals, users, invitations, sources, syncs, tasks] = await Promise.all([
     db.prepare("SELECT COUNT(*) AS visits FROM traffic_events WHERE workspace_id = ?").get(workspaceId),
     db.prepare(`
       SELECT COALESCE(NULLIF(utm_campaign, ''), 'direct') AS campaign, COUNT(*) AS visits
@@ -78,11 +78,25 @@ export async function growthMetrics(workspaceId = "default") {
       WHERE workspace_id = ?
       GROUP BY event_type
     `).all(workspaceId),
+    db.prepare("SELECT COUNT(*) AS count FROM users WHERE workspace_id = ?").get(workspaceId),
+    db.prepare("SELECT COUNT(*) AS count FROM invitations WHERE workspace_id = ?").get(workspaceId),
+    db.prepare("SELECT COUNT(*) AS count FROM sources WHERE workspace_id = ?").get(workspaceId),
+    db.prepare("SELECT COUNT(*) AS count FROM sync_logs WHERE workspace_id = ? AND type = 'media-resource-sync'").get(workspaceId),
+    db.prepare("SELECT COUNT(*) AS count FROM tasks WHERE workspace_id = ?").get(workspaceId),
   ]);
   const adCounts = Object.fromEntries(adTotals.map((row) => [row.event_type, Number(row.count || 0)]));
+  const visits = Number(totals?.visits || 0);
+  const funnel = growthFunnel({
+    visits,
+    users: Number(users?.count || 0),
+    invitations: Number(invitations?.count || 0),
+    sources: Number(sources?.count || 0),
+    syncs: Number(syncs?.count || 0),
+    tasks: Number(tasks?.count || 0),
+  });
   return {
     workspaceId,
-    visits: Number(totals?.visits || 0),
+    visits,
     campaigns: campaigns.map((row) => ({ campaign: row.campaign, visits: Number(row.visits || 0) })),
     sites: sites.map((row) => ({ sourceSite: row.source_site, visits: Number(row.visits || 0) })),
     ads: {
@@ -90,8 +104,11 @@ export async function growthMetrics(workspaceId = "default") {
       clicks: Number(adCounts.click || 0),
       ctr: adCounts.impression ? Number(((Number(adCounts.click || 0) / Number(adCounts.impression)) * 100).toFixed(2)) : 0,
     },
+    funnel,
     embed: {
-      script: `${process.env.PUBLIC_APP_URL || `http://127.0.0.1:${process.env.PORT || 4273}`}/embed.js?workspaceId=${encodeURIComponent(workspaceId)}&utm_campaign=traffic-site`,
+      script: `${publicAppUrl()}/embed.js?workspaceId=${encodeURIComponent(workspaceId)}&mode=poster-grid&limit=6&utm_campaign=traffic-site`,
+      listScript: `${publicAppUrl()}/embed.js?workspaceId=${encodeURIComponent(workspaceId)}&mode=list&limit=6&utm_campaign=traffic-site`,
+      compactScript: `${publicAppUrl()}/embed.js?workspaceId=${encodeURIComponent(workspaceId)}&mode=compact&limit=4&utm_campaign=traffic-site`,
     },
   };
 }
@@ -182,6 +199,37 @@ function fallbackAd(workspaceId, placement) {
     imageUrl: "",
     enabled: true,
   };
+}
+
+function growthFunnel({ visits, users, invitations, sources, syncs, tasks }) {
+  const members = users + invitations;
+  const activated = sources > 0 && syncs > 0;
+  return {
+    visits,
+    members,
+    users,
+    invitations,
+    sources,
+    syncs,
+    tasks,
+    activated,
+    rates: {
+      memberFromVisit: percent(members, visits),
+      sourceFromVisit: percent(sources, visits),
+      syncFromVisit: percent(syncs, visits),
+      sourceFromMember: percent(sources, members),
+      syncFromSource: percent(syncs, sources),
+    },
+  };
+}
+
+function percent(numerator, denominator) {
+  if (!denominator) return 0;
+  return Number(((Number(numerator || 0) / Number(denominator || 0)) * 100).toFixed(2));
+}
+
+function publicAppUrl() {
+  return process.env.PUBLIC_APP_URL || `http://127.0.0.1:${process.env.PORT || 4273}`;
 }
 
 function nextId(prefix) {

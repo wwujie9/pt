@@ -106,13 +106,16 @@ function serveEmbedScript(req, res, url) {
   var params = new URLSearchParams(script && script.src ? new URL(script.src).search : "");
   var workspaceId = params.get("workspaceId") || "default";
   var limit = params.get("limit") || "6";
+  var mode = params.get("mode") || "poster-grid";
+  var widgetTitle = params.get("title") || "影源资源榜";
+  var ctaText = params.get("cta") || "免费试用期";
   var campaign = params.get("utm_campaign") || new URLSearchParams(location.search).get("utm_campaign") || "embedded";
   var mount = document.createElement("section");
-  mount.className = "pt-resource-hub-widget";
+  mount.className = "pt-resource-hub-widget pt-widget-" + mode;
   mount.innerHTML = '<div class="pt-widget-loading">正在加载资源...</div>';
   script.parentNode.insertBefore(mount, script.nextSibling);
   var style = document.createElement("style");
-  style.textContent = ".pt-resource-hub-widget{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;border:1px solid #dce2ea;border-radius:8px;background:#fff;color:#18202f;overflow:hidden}.pt-resource-hub-widget a{text-decoration:none;color:inherit}.pt-widget-head{display:flex;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #dce2ea;background:#f8fafc}.pt-widget-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:12px}.pt-widget-card{display:grid;gap:8px}.pt-widget-card img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:6px;background:#eef2f7}.pt-widget-card strong{font-size:14px}.pt-widget-card span,.pt-widget-ad span,.pt-widget-loading{color:#647084;font-size:12px;line-height:1.5}.pt-widget-ad{margin:0 12px 12px;padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff}.pt-widget-ad strong{display:block;color:#2563eb;margin-bottom:4px}";
+  style.textContent = ".pt-resource-hub-widget{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;border:1px solid #dce2ea;border-radius:8px;background:#fff;color:#18202f;overflow:hidden}.pt-resource-hub-widget a{text-decoration:none;color:inherit}.pt-widget-head{display:flex;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #dce2ea;background:#f8fafc}.pt-widget-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;padding:12px}.pt-widget-card{display:grid;gap:8px}.pt-widget-card img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:6px;background:#eef2f7}.pt-widget-card strong{font-size:14px}.pt-widget-card span,.pt-widget-ad span,.pt-widget-loading{color:#647084;font-size:12px;line-height:1.5}.pt-widget-list .pt-widget-grid,.pt-widget-compact .pt-widget-grid{grid-template-columns:1fr}.pt-widget-list .pt-widget-card{grid-template-columns:54px minmax(0,1fr);align-items:center}.pt-widget-list .pt-widget-card img{aspect-ratio:1;width:54px}.pt-widget-compact .pt-widget-card{grid-template-columns:1fr}.pt-widget-compact .pt-widget-card img{display:none}.pt-widget-compact .pt-widget-card span{display:none}.pt-widget-ad{margin:0 12px 12px;padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff}.pt-widget-ad strong{display:block;color:#2563eb;margin-bottom:4px}";
   document.head.appendChild(style);
   trackVisit();
   fetch(apiBase + "/api/public/catalog?workspaceId=" + encodeURIComponent(workspaceId) + "&limit=" + encodeURIComponent(limit))
@@ -130,7 +133,7 @@ function serveEmbedScript(req, res, url) {
       '</a>';
     }).join("");
     var ad = payload.ad ? '<a class="pt-widget-ad" target="_blank" rel="noreferrer" data-ad-id="' + escapeHtml(payload.ad.id) + '" href="' + escapeHtml(absolute(payload.ad.targetUrl || "/")) + '"><strong>' + escapeHtml(payload.ad.title) + '</strong><span>' + escapeHtml(payload.ad.body || "") + '</span></a>' : "";
-    mount.innerHTML = '<div class="pt-widget-head"><strong>影源资源榜</strong><span>免费试用期</span></div><div class="pt-widget-grid">' + cards + '</div>' + ad;
+    mount.innerHTML = '<div class="pt-widget-head"><strong>' + escapeHtml(widgetTitle) + '</strong><span>' + escapeHtml(ctaText) + '</span></div><div class="pt-widget-grid">' + cards + '</div>' + ad;
     if (payload.ad) {
       trackAd(payload.ad.id, "impression");
       mount.querySelector("[data-ad-id]")?.addEventListener("click", function () { trackAd(payload.ad.id, "click"); });

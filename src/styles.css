@@ -1029,6 +1029,48 @@ pre {
   white-space: pre-wrap;
 }
 
+.embed-variants {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.embed-variants code {
+  display: block;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+
+.funnel-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.funnel-board article {
+  padding: 12px;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  background: #f0fdfa;
+}
+
+.funnel-board strong,
+.funnel-board span {
+  display: block;
+}
+
+.funnel-board strong {
+  color: #0f766e;
+  font-size: 20px;
+}
+
+.funnel-board span {
+  margin-top: 4px;
+  color: #46566f;
+  font-size: 12px;
+}
+
 .panel-heading {
   display: flex;
   align-items: center;
@@ -1221,6 +1263,7 @@ pre {
   .ops-dashboard,
   .growth-strategy,
   .growth-summary,
+  .funnel-board,
   .onboarding-steps {
     grid-template-columns: 1fr 1fr;
   }
@@ -1273,6 +1316,7 @@ pre {
   .ops-dashboard,
   .growth-strategy,
   .growth-summary,
+  .funnel-board,
   .onboarding-steps,
   .onboarding-actions,
   .onboarding-form,

@@ -817,6 +817,17 @@ function renderGrowthOps({ growthMetrics, adPlacements }) {
         </div>
         <label class="embed-code-label">现有流量站点嵌入代码</label>
         <pre class="embed-code">${escapeHtml(embedCode || "登录平台管理员后生成嵌入代码。")}</pre>
+        <div class="embed-variants">
+          ${embedVariant("海报网格", growthMetrics?.embed?.script)}
+          ${embedVariant("列表模式", growthMetrics?.embed?.listScript)}
+          ${embedVariant("紧凑模式", growthMetrics?.embed?.compactScript)}
+        </div>
+        <div class="funnel-board">
+          ${funnelStep("访问", growthMetrics?.funnel?.visits)}
+          ${funnelStep("成员", growthMetrics?.funnel?.members, `${growthMetrics?.funnel?.rates?.memberFromVisit ?? 0}%`)}
+          ${funnelStep("来源", growthMetrics?.funnel?.sources, `${growthMetrics?.funnel?.rates?.sourceFromMember ?? 0}%`)}
+          ${funnelStep("同步", growthMetrics?.funnel?.syncs, `${growthMetrics?.funnel?.rates?.syncFromSource ?? 0}%`)}
+        </div>
         <div class="log-list">
           ${(growthMetrics?.sites || []).map((site) => `<article><strong>${escapeHtml(site.sourceSite)}</strong><span>${site.visits} visits</span></article>`).join("") || `<p class="muted">暂无外部站点访问。</p>`}
         </div>
@@ -843,6 +854,20 @@ function renderGrowthOps({ growthMetrics, adPlacements }) {
         </div>
       </section>
     </div>
+  `;
+}
+
+function embedVariant(label, src) {
+  if (!src) return "";
+  return `<code>${escapeHtml(label)}: &lt;script src="${escapeHtml(src)}"&gt;&lt;/script&gt;</code>`;
+}
+
+function funnelStep(label, value, rate = "") {
+  return `
+    <article>
+      <strong>${value ?? 0}</strong>
+      <span>${escapeHtml(label)}${rate ? ` · ${escapeHtml(rate)}` : ""}</span>
+    </article>
   `;
 }
 
