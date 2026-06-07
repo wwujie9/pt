@@ -1,0 +1,26 @@
+[
+  {
+    "id": "internal-library",
+    "name": "Internal Library",
+    "type": "internal",
+    "enabled": true,
+    "weight": 1.2
+  },
+  {
+    "id": "prowlarr-torznab",
+    "name": "Prowlarr Torznab",
+    "type": "torznab",
+    "enabled": false,
+    "weight": 1,
+    "baseUrl": "http://127.0.0.1:9696/api/v1/search",
+    "apiKey": "replace-with-your-prowlarr-api-key"
+  },
+  {
+    "id": "authorized-rss",
+    "name": "Authorized RSS",
+    "type": "rss",
+    "enabled": false,
+    "weight": 0.85,
+    "url": "https://example.com/authorized-feed.xml"
+  }
+]

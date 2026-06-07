@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pt_resource_hub}
+      POSTGRES_USER: ${POSTGRES_USER:-pt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pt} -d ${POSTGRES_DB:-pt_resource_hub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  app:
+    image: ${APP_IMAGE:-ghcr.io/wwujie9/pt:latest}
+    restart: unless-stopped
+    env_file:
+      - ../.env.production
+    ports:
+      - "${APP_PORT:-4273}:4273"
+    volumes:
+      - app-storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    image: ${APP_IMAGE:-ghcr.io/wwujie9/pt:latest}
+    restart: unless-stopped
+    command: ["npm", "run", "worker"]
+    env_file:
+      - ../.env.production
+    volumes:
+      - app-storage:/app/storage
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  app-storage:

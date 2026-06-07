@@ -1,0 +1,173 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+jobs:
+  sqlite:
+    name: SQLite runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: npm run check:syntax
+
+      - name: Check migrations
+        run: npm run db:migrations
+        env:
+          DATABASE_DRIVER: sqlite
+
+      - name: Start app
+        run: |
+          PORT=4273 \
+          DATABASE_DRIVER=sqlite \
+          REQUIRE_AUTH=1 \
+          ALLOW_INSECURE_DEV=0 \
+          ADMIN_EMAIL=admin@example.local \
+          ADMIN_PASSWORD=admin123456 \
+          CREDENTIAL_SECRET=ci-secret-at-least-32-characters \
+          node --no-warnings server/index.js &
+          echo $! > server.pid
+
+      - name: Wait for app
+        run: |
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:4273/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Smoke test
+        run: npm run test:smoke
+        env:
+          APP_URL: http://127.0.0.1:4273
+
+      - name: SaaS E2E
+        run: npm run test:e2e
+        env:
+          APP_URL: http://127.0.0.1:4273
+
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill "$(cat server.pid)" || true
+          fi
+
+  postgres:
+    name: PostgreSQL runtime
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pt_resource_hub
+          POSTGRES_USER: pt
+          POSTGRES_PASSWORD: pt_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pt -d pt_resource_hub"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check PostgreSQL migrations
+        run: npm run db:migrations
+        env:
+          DATABASE_DRIVER: postgres
+          DATABASE_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+
+      - name: Start app with PostgreSQL
+        run: |
+          PORT=4273 \
+          DATABASE_DRIVER=postgres \
+          DATABASE_URL=postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub \
+          REQUIRE_AUTH=1 \
+          ALLOW_INSECURE_DEV=0 \
+          ADMIN_EMAIL=admin@example.local \
+          ADMIN_PASSWORD=admin123456 \
+          CREDENTIAL_SECRET=ci-secret-at-least-32-characters \
+          PUBLIC_APP_URL=http://127.0.0.1:4273 \
+          node --no-warnings server/index.js &
+          echo $! > server.pid
+
+      - name: Wait for app
+        run: |
+          for i in {1..40}; do
+            if curl -fsS http://127.0.0.1:4273/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+
+      - name: Smoke test
+        run: npm run test:smoke
+        env:
+          APP_URL: http://127.0.0.1:4273
+
+      - name: SaaS E2E
+        run: npm run test:e2e
+        env:
+          APP_URL: http://127.0.0.1:4273
+
+      - name: Worker run once
+        run: npm run worker
+        env:
+          DATABASE_DRIVER: postgres
+          DATABASE_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+          CREDENTIAL_SECRET: ci-secret-at-least-32-characters
+          WORKER_RUN_ONCE: "1"
+
+      - name: Stop app
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            kill "$(cat server.pid)" || true
+          fi
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs:
+      - sqlite
+      - postgres
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t pt-resource-hub:ci .

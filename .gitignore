@@ -1,0 +1,11 @@
+node_modules/
+npm-debug.log*
+.env
+.env.local
+.env.production
+.env.*.local
+storage/*.db
+storage/*.db-shm
+storage/*.db-wal
+storage/backups/
+*.pid

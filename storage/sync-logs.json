@@ -1,0 +1,12 @@
+[
+  {
+    "id": "job-mq3habk8",
+    "createdAt": "2026-06-07T07:46:24.392Z",
+    "type": "media-resource-sync",
+    "status": "success",
+    "mediaId": "m-001",
+    "sourceCount": 1,
+    "importedCount": 1,
+    "errors": []
+  }
+]

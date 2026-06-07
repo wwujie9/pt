@@ -1,0 +1,86 @@
+name: CD
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  publish:
+    name: Build and publish image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        run: |
+          IMAGE="${IMAGE_NAME,,}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${GITHUB_SHA::12}"
+          fi
+          echo "image=${IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "latest=${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: |
+          docker build \
+            -t "${{ steps.meta.outputs.image }}" \
+            -t "${{ steps.meta.outputs.latest }}" \
+            .
+
+      - name: Push image
+        run: |
+          docker push "${{ steps.meta.outputs.image }}"
+          docker push "${{ steps.meta.outputs.latest }}"
+
+  deploy:
+    name: Deploy over SSH
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: publish
+    if: ${{ github.ref == 'refs/heads/main' && vars.ENABLE_SSH_DEPLOY == '1' }}
+    steps:
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_IMAGE: ${{ needs.publish.outputs.image }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          envs: APP_IMAGE
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            test -f .env.production
+            git fetch --all --prune
+            git checkout main
+            git pull --ff-only
+            APP_IMAGE="$APP_IMAGE" docker compose --env-file .env.production -f deploy/docker-compose.prod.yml pull
+            APP_IMAGE="$APP_IMAGE" docker compose --env-file .env.production -f deploy/docker-compose.prod.yml up -d
+            docker compose --env-file .env.production -f deploy/docker-compose.prod.yml ps

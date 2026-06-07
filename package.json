@@ -1,0 +1,23 @@
+{
+  "name": "pt-resource-hub",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pg": "^8.13.1"
+  },
+  "scripts": {
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "dev:4273": "node --no-warnings server/index.js",
+    "dev": "node --no-warnings server/index.js",
+    "start": "node --no-warnings server/index.js",
+    "worker": "node --no-warnings server/worker.js",
+    "test:smoke": "node scripts/smoke-test.mjs",
+    "test:e2e": "node scripts/e2e-saas.mjs",
+    "backup": "node scripts/backup.mjs",
+    "db:migrations": "node --no-warnings scripts/check-migrations.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
