@@ -141,6 +141,18 @@ POST /api/billing/webhooks/lemon
 
 Webhook 会校验签名、记录 `billing_events`，并在支付成功后按 metadata/custom data 中的 `workspaceId` 和 `planName` 自动切换套餐。
 
+支付运营接口：
+
+```text
+GET  /api/billing/invoices
+POST /api/billing/refunds
+POST /api/billing/webhook-replays
+```
+
+`/api/billing/invoices` 会从已记录的 provider 事件中提取 invoice URL、PDF、金额、币种和状态。
+`/api/billing/refunds` 在配置 `STRIPE_SECRET_KEY` 且原支付事件包含 payment intent / charge 时会调用 Stripe refund API；否则记录为人工退款单，避免运营动作丢失。
+`/api/billing/webhook-replays` 会使用 `billing_events.payload.raw` 重新执行已验证 webhook 的业务归一化逻辑，并记录 `webhook.replayed` 审计事件。
+
 ## 4. 真实邮件
 
 默认本地输出：
@@ -239,6 +251,26 @@ npm run backup:postgres:restore -- storage/postgres-backups/xxx.dump
 
 可通过 `RESTORE_SLA_SECONDS` 设置恢复 SLA，超时会让脚本失败。
 
+备份生命周期策略：
+
+```bash
+BACKUP_RETENTION_DAYS=30 \
+OBJECT_RETENTION_DAYS=90 \
+BACKUP_MIN_KEEP=3 \
+BACKUP_LIFECYCLE_DRY_RUN=1 \
+npm run backup:lifecycle
+```
+
+该脚本会扫描：
+
+```text
+PG_BACKUP_DIR
+BACKUP_DIR
+OBJECT_ARCHIVE_DIR
+```
+
+并删除超过保留期的本地备份，同时始终保留最新 `BACKUP_MIN_KEEP` 个文件。S3/R2/MinIO 建议在 bucket 侧配置版本化、生命周期过期、不可变保留和跨区复制；应用脚本负责本地与 file provider 归档目录，避免误删远端对象。
+
 ## 6. 多实例 Redis 限流
 
 未配置 Redis 时，限流使用进程内 Map，只适合单实例。
@@ -314,3 +346,50 @@ npm run test:payment-contract
 - Lemon Squeezy 错误签名 webhook 被拒绝。
 
 CI 会在 PostgreSQL + RLS + 低权限 runtime role 的环境下执行该合同测试。
+
+新增覆盖：
+
+- Stripe invoice webhook 会生成可查询发票。
+- 已记录 webhook 可以通过 API 重放。
+- 退款 API 可以创建退款记录，并在 Stripe API 可用时发起真实 refund。
+
+## 10. 生产监控告警
+
+监控检查：
+
+```bash
+DATABASE_DRIVER=postgres \
+DATABASE_URL=postgres://pt_app:app-password@postgres:5432/pt_resource_hub \
+DATABASE_MIGRATION_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
+npm run monitoring:check
+```
+
+平台管理员 API：
+
+```text
+GET  /api/monitoring
+POST /api/jobs/monitoring
+```
+
+可配置阈值：
+
+```env
+MONITORING_ALERTS=1
+MONITORING_FAIL_ON_ALERT=1
+ALERT_MAX_FAILED_TASKS=0
+ALERT_MAX_QUEUED_TASKS=100
+ALERT_MAX_FAILED_SOURCES=0
+ALERT_MAX_BACKUP_AGE_HOURS=24
+ALERT_MAX_SYNC_AGE_HOURS=24
+```
+
+监控内容：
+
+- 数据库 driver 与基础 stats。
+- 任务队列状态分布。
+- 来源健康检查失败数量。
+- 最近同步时间和状态。
+- 最近账单事件。
+- 最近本地 / PostgreSQL 备份文件时间。
+
+当 `MONITORING_ALERTS=1` 且发现告警时，会通过 `WEBHOOK_URL` 发送 `monitoring.alert` 事件。CI 中也会运行 `monitoring:check`，用于阻止没有备份或存在关键运营异常的镜像继续发布。

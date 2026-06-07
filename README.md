@@ -45,7 +45,8 @@
 - PostgreSQL `pg_dump` 备份与恢复演练脚本。
 - S3/R2/MinIO 对象存储备份归档。
 - 恢复 SLA 演练指标。
-- 支付 sandbox webhook 合同测试。
+- 支付发票查询、退款记录、webhook 重放和 sandbox 合同测试。
+- 备份生命周期策略与生产监控告警。
 - Redis 多实例共享限流。
 - Trivy 镜像安全扫描与 Dependabot。
 
@@ -206,8 +207,13 @@ POST /api/invitations
 GET  /api/invitations
 POST /api/invitations/accept
 GET  /api/billing/events
+GET  /api/billing/invoices
 POST /api/billing/checkout
 POST /api/billing/plan
+POST /api/billing/refunds
+POST /api/billing/webhook-replays
+GET  /api/monitoring
+POST /api/jobs/monitoring
 GET  /api/download-clients
 POST /api/download-clients
 POST /api/download-clients/:id/test

@@ -31,7 +31,19 @@ import {
 } from "../services/auth.js";
 import { sendInvitationEmail } from "../services/email.js";
 import { runBackupJob, runHealthJob } from "../services/jobs.js";
-import { changePlan, createCheckoutSession, getPlan, getUsage, handlePaymentWebhook, listBillingEvents, listPlans } from "../services/billing.js";
+import {
+  changePlan,
+  createCheckoutSession,
+  createRefund,
+  getPlan,
+  getUsage,
+  handlePaymentWebhook,
+  listBillingEvents,
+  listInvoices,
+  listPlans,
+  replayBillingWebhook,
+} from "../services/billing.js";
+import { collectMonitoringSnapshot, runMonitoringCheck } from "../services/monitoring.js";
 import {
   enqueueDownloadTask,
   listDownloadClients,
@@ -176,10 +188,49 @@ async function handleApiWithContext(req, res, url, authContext, workspaceId) {
     return json(res, 200, await listBillingEvents(workspaceId));
   }
 
+  if (req.method === "GET" && url.pathname === "/api/billing/invoices") {
+    return json(res, 200, await listInvoices(workspaceId));
+  }
+
   if (req.method === "POST" && url.pathname === "/api/billing/checkout") {
     try {
       const body = await readJsonBody(req);
       return json(res, 200, await createCheckoutSession(workspaceId, body.plan, authContext.user));
+    } catch (error) {
+      return badRequest(res, error.message);
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/billing/refunds") {
+    try {
+      const result = await createRefund(workspaceId, await readJsonBody(req), authContext.user);
+      await appendAuditLog({
+        actor: authContext.user,
+        workspaceId,
+        action: "billing.refund",
+        targetType: "billing_event",
+        targetId: result.refund.id,
+        payload: result.refund,
+      });
+      return json(res, 200, result);
+    } catch (error) {
+      return badRequest(res, error.message);
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/billing/webhook-replays") {
+    try {
+      const body = await readJsonBody(req);
+      const result = await replayBillingWebhook(workspaceId, body.eventId, authContext.user);
+      await appendAuditLog({
+        actor: authContext.user,
+        workspaceId,
+        action: "billing.webhook_replay",
+        targetType: "billing_event",
+        targetId: body.eventId,
+        payload: result,
+      });
+      return json(res, 200, result);
     } catch (error) {
       return badRequest(res, error.message);
     }
@@ -354,6 +405,21 @@ async function handleApiWithContext(req, res, url, authContext, workspaceId) {
     await appendAuditLog({
       actor: authContext.user,
       action: "job.backup",
+      targetType: "job",
+      payload: result,
+    });
+    return json(res, 200, result);
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/monitoring") {
+    return json(res, 200, await collectMonitoringSnapshot());
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/jobs/monitoring") {
+    const result = await runMonitoringCheck();
+    await appendAuditLog({
+      actor: authContext.user,
+      action: "job.monitoring",
       targetType: "job",
       payload: result,
     });
@@ -559,6 +625,8 @@ function routeNeedsRlsBypass(req, url, authContext) {
   if (url.pathname.startsWith("/api/billing/webhooks/")) return true;
   if (url.pathname === "/api/audit-logs" && isPlatformAdmin(authContext) && url.searchParams.get("all") === "1") return true;
   if (url.pathname === "/api/jobs/backup" && isPlatformAdmin(authContext)) return true;
+  if (url.pathname === "/api/jobs/monitoring" && isPlatformAdmin(authContext)) return true;
+  if (url.pathname === "/api/monitoring" && isPlatformAdmin(authContext)) return true;
   if (url.pathname === "/api/workspaces" && req.method === "POST" && isPlatformAdmin(authContext)) return true;
   return false;
 }
@@ -575,6 +643,7 @@ function needsAdmin(req, url) {
     || url.pathname === "/api/workspaces"
     || url.pathname === "/api/invitations"
     || url.pathname === "/api/audit-logs"
+    || url.pathname === "/api/monitoring"
     || url.pathname.startsWith("/api/jobs")
     || url.pathname.startsWith("/api/download-clients")
     || url.pathname.startsWith("/api/tasks")
@@ -597,6 +666,8 @@ function needsPlatformAdmin(req, url) {
     (url.pathname === "/api/workspaces" && req.method === "POST")
     || url.pathname === "/api/audit-logs"
     || url.pathname === "/api/jobs/backup"
+    || url.pathname === "/api/jobs/monitoring"
+    || url.pathname === "/api/monitoring"
   );
 }
 

@@ -1,6 +1,7 @@
 import { getStats } from "./catalog.js";
 import { listSources, testSource } from "./sources.js";
 import { appendSyncLog } from "./store.js";
+import { runMonitoringCheck } from "./monitoring.js";
 import { copyFile, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -14,9 +15,11 @@ export function startScheduler() {
   setInterval(() => {
     runHealthJob().catch(() => null);
     runBackupJob().catch(() => null);
+    runMonitoringCheck().catch(() => null);
   }, intervalMs).unref();
   runHealthJob().catch(() => null);
   runBackupJob().catch(() => null);
+  runMonitoringCheck().catch(() => null);
 }
 
 export async function runHealthJob() {

@@ -217,6 +217,28 @@ jobs:
           RESTORE_SLA_SECONDS=300 \
           npm run backup:postgres:restore -- "$BACKUP_FILE"
 
+      - name: Backup lifecycle policy dry run
+        run: |
+          BACKUP_LIFECYCLE_DRY_RUN=1 \
+          PG_BACKUP_DIR=storage/postgres-backups \
+          OBJECT_ARCHIVE_DIR=storage/object-archive \
+          npm run backup:lifecycle
+
+      - name: Production monitoring check
+        run: npm run monitoring:check
+        env:
+          DATABASE_DRIVER: postgres
+          DATABASE_URL: postgres://pt_app:pt_app_password@127.0.0.1:5432/pt_resource_hub
+          DATABASE_MIGRATION_URL: postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub
+          PG_BACKUP_DIR: storage/postgres-backups
+          BACKUP_DIR: storage/backups
+          MONITORING_FAIL_ON_ALERT: "1"
+          ALERT_MAX_FAILED_TASKS: "0"
+          ALERT_MAX_QUEUED_TASKS: "100"
+          ALERT_MAX_FAILED_SOURCES: "0"
+          ALERT_MAX_BACKUP_AGE_HOURS: "24"
+          ALERT_MAX_SYNC_AGE_HOURS: "24"
+
       - name: Stop app
         if: always()
         run: |

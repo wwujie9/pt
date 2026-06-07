@@ -19,7 +19,9 @@
     "backup": "node scripts/backup.mjs",
     "backup:postgres": "node scripts/postgres-backup.mjs",
     "backup:archive": "node scripts/archive-backup.mjs",
+    "backup:lifecycle": "node scripts/backup-lifecycle.mjs",
     "backup:postgres:restore": "node scripts/postgres-restore-drill.mjs",
+    "monitoring:check": "node scripts/monitoring-check.mjs",
     "db:migrations": "node --no-warnings scripts/check-migrations.mjs",
     "db:provision-app-role": "node --no-warnings scripts/provision-postgres-app-role.mjs",
     "db:rls:enable": "node --no-warnings scripts/enable-rls.mjs"

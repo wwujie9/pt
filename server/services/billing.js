@@ -110,24 +110,106 @@ export async function createCheckoutSession(workspaceId, planName, actor = null)
 export async function handlePaymentWebhook(provider, rawBody, headers = {}) {
   const payload = parseAndVerifyWebhook(provider, rawBody, headers);
   const normalized = normalizePaymentEvent(provider, payload);
+  await applyPaymentEvent(provider, payload, normalized);
+  return { ok: true, provider, event: normalized };
+}
+
+export async function replayBillingWebhook(workspaceId, eventId, actor = null) {
+  const event = await getBillingEvent(workspaceId, eventId);
+  if (!event) throw new Error("账单事件不存在");
+  const provider = event.payload.provider;
+  const raw = event.payload.raw;
+  if (!provider || !raw) throw new Error("该账单事件缺少可重放的原始 webhook payload");
+  const normalized = normalizePaymentEvent(provider, raw);
+  if (normalized.workspaceId !== workspaceId) throw new Error("重放事件 workspace 不匹配");
+  await applyPaymentEvent(provider, raw, normalized, { replayedFrom: event.id, actorId: actor?.id || null });
+  const replay = await recordBillingEvent(workspaceId, "webhook.replayed", {
+    provider,
+    providerEventId: normalized.providerEventId,
+    sourceBillingEventId: event.id,
+    actorId: actor?.id || null,
+    status: "replayed",
+  });
+  return { ok: true, replay, event: normalized };
+}
+
+export async function createRefund(workspaceId, input = {}, actor = null) {
+  const sourceEvent = input.billingEventId ? await getBillingEvent(workspaceId, input.billingEventId) : null;
+  const sourcePayload = sourceEvent?.payload || {};
+  const provider = input.provider || sourcePayload.provider || process.env.PAYMENT_PROVIDER || "manual";
+  const amountCents = Number(input.amountCents || sourceEvent?.amountCents || 0);
+  if (amountCents < 0) throw new Error("退款金额不能为负数");
+  const reason = input.reason || "requested_by_customer";
+  const refund = provider === "stripe"
+    ? await createStripeRefund({ sourceEvent, amountCents, reason })
+    : await createManualRefund({ provider, sourceEvent, amountCents, reason });
+  const event = await recordBillingEvent(workspaceId, refund.type, {
+    provider,
+    providerEventId: refund.id,
+    sourceBillingEventId: sourceEvent?.id || null,
+    actorId: actor?.id || null,
+    reason,
+    amountCents: refund.amountCents,
+    currency: refund.currency,
+    status: refund.status,
+    raw: refund.raw,
+  });
+  return { ok: true, refund: event };
+}
+
+export async function listInvoices(workspaceId = "default") {
+  const events = await listBillingEvents(workspaceId);
+  return events
+    .filter((event) => isInvoiceEvent(event) || isPaidPaymentEvent(event))
+    .map((event) => ({
+      id: event.id,
+      workspaceId: event.workspaceId,
+      provider: event.payload.provider || "manual",
+      providerEventId: event.payload.providerEventId || null,
+      providerSessionId: event.payload.providerSessionId || null,
+      providerInvoiceId: event.payload.providerInvoiceId || null,
+      providerPaymentId: event.payload.providerPaymentId || null,
+      planName: event.payload.planName || null,
+      amountCents: event.amountCents,
+      currency: event.currency,
+      status: invoiceStatus(event),
+      invoiceUrl: event.payload.invoiceUrl || null,
+      invoicePdf: event.payload.invoicePdf || null,
+      createdAt: event.createdAt,
+    }));
+}
+
+export async function getBillingEvent(workspaceId, eventId) {
+  const row = await db
+    .prepare("SELECT * FROM billing_events WHERE workspace_id = ? AND id = ?")
+    .get(workspaceId, eventId);
+  if (!row) return null;
+  return billingEventFromRow(row);
+}
+
+async function applyPaymentEvent(provider, payload, normalized, extraPayload = {}) {
   if (!normalized.workspaceId) throw new Error("支付事件缺少 workspaceId");
 
   await recordBillingEvent(normalized.workspaceId, normalized.type, {
     provider,
     providerEventId: normalized.providerEventId,
     providerSessionId: normalized.providerSessionId,
+    providerInvoiceId: normalized.providerInvoiceId,
+    providerPaymentId: normalized.providerPaymentId,
+    providerCustomerId: normalized.providerCustomerId,
     planName: normalized.planName,
     status: normalized.status,
     amountCents: normalized.amountCents,
     currency: normalized.currency,
+    invoiceUrl: normalized.invoiceUrl,
+    invoicePdf: normalized.invoicePdf,
+    ...extraPayload,
     raw: payload,
   });
 
   if (normalized.status === "paid" && normalized.planName) {
     await changePlan(normalized.workspaceId, normalized.planName, { id: `payment:${provider}` });
   }
-
-  return { ok: true, provider, event: normalized };
 }
 
 export async function recordBillingEvent(workspaceId, type, payload = {}) {
@@ -152,16 +234,20 @@ export async function listBillingEvents(workspaceId = "default") {
   return (await db
     .prepare("SELECT * FROM billing_events WHERE workspace_id = ? ORDER BY created_at DESC LIMIT 100")
     .all(workspaceId))
-    .map((row) => ({
-      id: row.id,
-      workspaceId: row.workspace_id,
-      type: row.type,
-      amountCents: row.amount_cents,
-      currency: row.currency,
-      status: row.status,
-      payload: parsePayload(row.payload),
-      createdAt: row.created_at,
-    }));
+    .map(billingEventFromRow);
+}
+
+function billingEventFromRow(row) {
+  return {
+    id: row.id,
+    workspaceId: row.workspace_id,
+    type: row.type,
+    amountCents: row.amount_cents,
+    currency: row.currency,
+    status: row.status,
+    payload: parsePayload(row.payload),
+    createdAt: row.created_at,
+  };
 }
 
 function parsePayload(payload) {
@@ -274,15 +360,22 @@ function verifyHmacSignature(payload, signature, secret) {
 function normalizePaymentEvent(provider, payload) {
   if (provider === "stripe") {
     const object = payload.data?.object || {};
+    const metadata = stripeMetadata(object);
+    const status = stripeStatus(payload.type, object);
     return {
       providerEventId: payload.id,
       providerSessionId: object.id,
+      providerInvoiceId: object.object === "invoice" ? object.id : object.invoice,
+      providerPaymentId: object.payment_intent || object.charge || object.latest_charge || object.id,
+      providerCustomerId: object.customer || object.customer_id,
       type: `payment.${payload.type || "stripe"}`,
-      workspaceId: object.metadata?.workspaceId || object.client_reference_id,
-      planName: object.metadata?.planName,
-      status: payload.type === "checkout.session.completed" ? "paid" : object.payment_status || "recorded",
-      amountCents: object.amount_total || 0,
+      workspaceId: metadata.workspaceId || object.client_reference_id,
+      planName: metadata.planName,
+      status,
+      amountCents: object.amount_total || object.amount_paid || object.amount_due || object.amount_refunded || object.amount || 0,
       currency: String(object.currency || "USD").toUpperCase(),
+      invoiceUrl: object.hosted_invoice_url || object.receipt_url || null,
+      invoicePdf: object.invoice_pdf || null,
     };
   }
   if (provider === "lemon") {
@@ -291,15 +384,107 @@ function normalizePaymentEvent(provider, payload) {
     return {
       providerEventId: payload.meta?.event_id || payload.data?.id,
       providerSessionId: payload.data?.id,
+      providerInvoiceId: attributes.order_number || payload.data?.id,
+      providerPaymentId: attributes.identifier || payload.data?.id,
+      providerCustomerId: attributes.customer_id,
       type: `payment.${payload.meta?.event_name || "lemon"}`,
       workspaceId: custom.workspaceId,
       planName: custom.planName,
-      status: String(payload.meta?.event_name || "").includes("order_created") ? "paid" : "recorded",
-      amountCents: attributes.total || 0,
+      status: lemonStatus(payload.meta?.event_name),
+      amountCents: attributes.total || attributes.refunded_amount || 0,
       currency: attributes.currency || "USD",
+      invoiceUrl: attributes.urls?.receipt || attributes.receipt_url || null,
+      invoicePdf: null,
     };
   }
   throw new Error(`不支持的支付 provider：${provider}`);
+}
+
+function stripeMetadata(object) {
+  return {
+    ...(object.metadata || {}),
+    ...(object.subscription_details?.metadata || {}),
+    ...(object.lines?.data?.[0]?.metadata || {}),
+  };
+}
+
+function stripeStatus(type, object) {
+  if (type === "checkout.session.completed") return "paid";
+  if (type === "invoice.paid" || type === "invoice.payment_succeeded") return "paid";
+  if (type === "invoice.payment_failed") return "failed";
+  if (type === "charge.refunded" || type === "refund.succeeded") return "refunded";
+  return object.payment_status || object.status || "recorded";
+}
+
+function lemonStatus(eventName = "") {
+  if (String(eventName).includes("order_created")) return "paid";
+  if (String(eventName).includes("subscription_payment_success")) return "paid";
+  if (String(eventName).includes("refund")) return "refunded";
+  return "recorded";
+}
+
+function isInvoiceEvent(event) {
+  return event.type.includes("invoice") || Boolean(event.payload.invoiceUrl || event.payload.invoicePdf || event.payload.providerInvoiceId);
+}
+
+function isPaidPaymentEvent(event) {
+  return event.status === "paid" && event.amountCents > 0;
+}
+
+function invoiceStatus(event) {
+  if (event.status === "paid") return "paid";
+  if (event.status === "failed") return "failed";
+  if (event.status === "refunded") return "refunded";
+  return event.payload.status || event.status;
+}
+
+async function createStripeRefund({ sourceEvent, amountCents, reason }) {
+  const secretKey = process.env.STRIPE_SECRET_KEY;
+  const paymentIntent = sourceEvent?.payload?.providerPaymentId || sourceEvent?.payload?.raw?.data?.object?.payment_intent;
+  const charge = sourceEvent?.payload?.raw?.data?.object?.charge || sourceEvent?.payload?.raw?.data?.object?.id;
+  if (!secretKey || (!paymentIntent && !charge)) {
+    return createManualRefund({ provider: "stripe", sourceEvent, amountCents, reason, status: "pending" });
+  }
+  const params = new URLSearchParams({
+    reason,
+  });
+  if (amountCents > 0) params.set("amount", String(amountCents));
+  if (paymentIntent) params.set("payment_intent", paymentIntent);
+  else params.set("charge", charge);
+  const response = await fetch("https://api.stripe.com/v1/refunds", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${secretKey}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: params,
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error?.message || `Stripe refund 失败：HTTP ${response.status}`);
+  return {
+    id: body.id,
+    type: "refund.created",
+    status: body.status || "pending",
+    amountCents: body.amount || amountCents,
+    currency: String(body.currency || sourceEvent?.currency || "USD").toUpperCase(),
+    raw: body,
+  };
+}
+
+async function createManualRefund({ provider, sourceEvent, amountCents, reason, status = "recorded" }) {
+  return {
+    id: `refund-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    type: "refund.created",
+    status,
+    amountCents,
+    currency: sourceEvent?.currency || "USD",
+    raw: {
+      provider,
+      reason,
+      sourceBillingEventId: sourceEvent?.id || null,
+      note: "未配置 provider API 或 provider 暂不支持自动退款，已记录人工退款单。",
+    },
+  };
 }
 
 function header(headers, name) {

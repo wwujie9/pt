@@ -1,14 +1,23 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { db } from "../server/services/db.js";
 
-if (db.driver !== "postgres") {
+if ((process.env.DATABASE_DRIVER || "sqlite") !== "postgres") {
   console.log("RLS 只适用于 PostgreSQL，当前 driver 已跳过。");
-  await db.close?.();
   process.exit(0);
 }
 
+const databaseUrl = process.env.DATABASE_MIGRATION_URL || process.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("启用 RLS 需要 DATABASE_MIGRATION_URL 或 DATABASE_URL");
+
+const { Pool } = await import("pg");
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ssl: process.env.DATABASE_SSL === "1" ? { rejectUnauthorized: false } : undefined,
+});
 const sql = readFileSync(resolve("deploy/rls/enable-workspace-rls.sql"), "utf8");
-await db.withRlsBypass(() => db.exec(sql));
-console.log(JSON.stringify({ ok: true, rls: "enabled" }, null, 2));
-await db.close?.();
+try {
+  await pool.query(sql);
+  console.log(JSON.stringify({ ok: true, rls: "enabled" }, null, 2));
+} finally {
+  await pool.end();
+}
