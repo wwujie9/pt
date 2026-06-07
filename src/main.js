@@ -147,6 +147,7 @@ function bindAdminEvents() {
     if (!output) return;
     output.hidden = false;
     output.textContent = error?.message || String(error);
+    showToast(output.textContent, "error");
   };
   document.querySelector("#adminRefreshButton")?.addEventListener("click", () => renderRoute());
   const tokenInput = document.querySelector("#adminToken");
@@ -164,6 +165,7 @@ function bindAdminEvents() {
     const form = event.currentTarget;
     const data = new FormData(form);
     await login(data.get("email"), data.get("password"));
+    showToast("登录成功");
     await renderRoute();
   });
 
@@ -186,6 +188,7 @@ function bindAdminEvents() {
       });
       localStorage.setItem("workspaceId", workspace.id);
       form.reset();
+      showToast("Workspace 已创建并切换");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -203,6 +206,7 @@ function bindAdminEvents() {
       });
       localStorage.setItem("workspaceId", workspace.id);
       form.reset();
+      showToast("Workspace 已创建并切换");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -222,6 +226,7 @@ function bindAdminEvents() {
         password: data.get("password"),
       });
       form.reset();
+      showToast("用户已创建");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -241,6 +246,7 @@ function bindAdminEvents() {
       });
       document.querySelector("#inviteOutput").textContent = `邀请已创建，临时密码：${invite.inviteToken}`;
       form.reset();
+      showToast("邀请已创建");
     } catch (error) {
       showAdminError(error);
     }
@@ -260,6 +266,7 @@ function bindAdminEvents() {
       const output = document.querySelector("#onboardingInviteOutput");
       if (output) output.textContent = `邀请已创建，接受链接 token：${invite.inviteToken}`;
       form.reset();
+      showToast("邀请已创建");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -281,6 +288,7 @@ function bindAdminEvents() {
         password: data.get("password"),
       });
       form.reset();
+      showToast("下载器已保存");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -307,6 +315,7 @@ function bindAdminEvents() {
     try {
       await createTask({ title: data.get("title"), clientId: data.get("clientId"), resourceId: data.get("resourceId") });
       form.reset();
+      showToast("任务已创建");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -317,6 +326,7 @@ function bindAdminEvents() {
     button.addEventListener("click", async () => {
       try {
         await rerunTask(button.dataset.rerunTask);
+        showToast("任务已重新入队");
         await renderRoute();
       } catch (error) {
         showAdminError(error);
@@ -328,6 +338,7 @@ function bindAdminEvents() {
     button.addEventListener("click", async () => {
       try {
         await changeBillingPlan(button.dataset.changePlan);
+        showToast("套餐已切换");
         await renderRoute();
       } catch (error) {
         showAdminError(error);
@@ -338,6 +349,7 @@ function bindAdminEvents() {
   document.querySelector("#monitoringRunButton")?.addEventListener("click", async () => {
     try {
       await runMonitoring();
+      showToast("监控检查已完成");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -347,6 +359,7 @@ function bindAdminEvents() {
   document.querySelector("#onboardingMonitoringButton")?.addEventListener("click", async () => {
     try {
       await runMonitoring();
+      showToast("监控检查已完成");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -357,6 +370,7 @@ function bindAdminEvents() {
     button.addEventListener("click", async () => {
       try {
         await replayBillingWebhook(button.dataset.replayWebhook);
+        showToast("Webhook 已重放");
         await renderRoute();
       } catch (error) {
         showAdminError(error);
@@ -374,6 +388,7 @@ function bindAdminEvents() {
           amountCents: amount.trim() ? Number(amount) : undefined,
           reason: "requested_by_customer",
         });
+        showToast("退款记录已创建");
         await renderRoute();
       } catch (error) {
         showAdminError(error);
@@ -385,6 +400,7 @@ function bindAdminEvents() {
     select.addEventListener("change", async () => {
       try {
         await updateUser(select.dataset.userRole, { role: select.value });
+        showToast("用户角色已更新");
         await renderRoute();
       } catch (error) {
         showAdminError(error);
@@ -396,6 +412,7 @@ function bindAdminEvents() {
     select.addEventListener("change", async () => {
       try {
         await updateUser(select.dataset.userWorkspace, { workspaceId: select.value });
+        showToast("用户 workspace 已更新");
         await renderRoute();
       } catch (error) {
         showAdminError(error);
@@ -406,6 +423,7 @@ function bindAdminEvents() {
   document.querySelectorAll("[data-user-toggle]").forEach((button) => {
     button.addEventListener("click", async () => {
       await updateUser(button.dataset.userToggle, { enabled: button.dataset.enabled !== "true" });
+      showToast("用户状态已更新");
       await renderRoute();
     });
   });
@@ -415,6 +433,7 @@ function bindAdminEvents() {
       const password = prompt("请输入新密码，至少 8 位");
       if (!password) return;
       await updateUser(button.dataset.userReset, { password });
+      showToast("密码已重置");
       await renderRoute();
     });
   });
@@ -431,6 +450,7 @@ function bindAdminEvents() {
     await changePassword(data.get("oldPassword"), data.get("newPassword"));
     localStorage.removeItem("sessionToken");
     form.reset();
+    showToast("密码已修改，请重新登录");
     await renderRoute();
   });
 
@@ -450,6 +470,7 @@ function bindAdminEvents() {
     };
     await saveSource(source);
     form.reset();
+    showToast("来源已保存");
     await renderRoute();
   });
 
@@ -470,6 +491,7 @@ function bindAdminEvents() {
       };
       await saveSource(source);
       form.reset();
+      showToast("来源已保存");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -483,6 +505,7 @@ function bindAdminEvents() {
       try {
         const result = await testSource(button.dataset.onboardingTestSource);
         button.textContent = result.ok ? "测试通过" : "测试失败";
+        showToast(result.ok ? "来源测试通过" : "来源测试失败", result.ok ? "success" : "error");
         await renderRoute();
       } catch (error) {
         button.textContent = "测试失败";
@@ -500,6 +523,7 @@ function bindAdminEvents() {
     const data = new FormData(event.currentTarget);
     try {
       await syncMediaResources(data.get("mediaId"));
+      showToast("首次同步已完成");
       await renderRoute();
     } catch (error) {
       showAdminError(error);
@@ -525,6 +549,7 @@ function bindAdminEvents() {
     button.addEventListener("click", async () => {
       if (!confirm(`确认删除来源 ${button.dataset.deleteSource}？`)) return;
       await deleteSource(button.dataset.deleteSource);
+      showToast("来源已删除");
       await renderRoute();
     });
   });
@@ -536,8 +561,10 @@ function bindAdminEvents() {
       try {
         const result = await testSource(button.dataset.testSource);
         button.textContent = result.ok ? "可用" : "失败";
+        showToast(result.ok ? "来源测试通过" : "来源测试失败", result.ok ? "success" : "error");
       } catch (error) {
         button.textContent = error.message;
+        showToast(error.message, "error");
       } finally {
         setTimeout(() => {
           if (button.isConnected) button.disabled = false;
@@ -561,6 +588,7 @@ function bindAdminEvents() {
   document.querySelectorAll("[data-review-resource]").forEach((button) => {
     button.addEventListener("click", async () => {
       await updateReviewResource(button.dataset.reviewResource, button.dataset.reviewStatus);
+      showToast("审核状态已更新");
       await renderRoute();
     });
   });
@@ -626,8 +654,22 @@ function bindTmdbImportEvents() {
       button.textContent = "导入中";
       await importTmdbMedia(item);
       button.textContent = "已导入";
+      showToast("TMDB 条目已导入");
     });
   });
+}
+
+function showToast(message, tone = "success") {
+  const host = document.querySelector("#toastHost");
+  if (!host) return;
+  const item = document.createElement("div");
+  item.className = `toast ${tone}`;
+  item.textContent = message;
+  host.appendChild(item);
+  setTimeout(() => {
+    item.classList.add("leaving");
+    setTimeout(() => item.remove(), 220);
+  }, 2600);
 }
 
 function escapeHtml(value) {

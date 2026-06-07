@@ -16,6 +16,7 @@ export function renderAppShell() {
         <a href="#/admin">管理</a>
       </nav>
     </header>
+    <div id="toastHost" class="toast-host" aria-live="polite"></div>
     <main id="view"></main>
   `;
 }
@@ -668,6 +669,12 @@ function renderOnboarding({ onboarding, workspaces, adapters, mediaItems, monito
         </div>
         <strong>${onboarding.completed}/${onboarding.steps.length}</strong>
       </div>
+      ${onboarding.completed === onboarding.steps.length ? `
+        <div class="onboarding-complete">
+          <strong>试点环境已就绪</strong>
+          <span>可以继续配置真实邮件、支付 sandbox、对象存储归档、RLS 生产角色和监控 webhook。</span>
+        </div>
+      ` : ""}
       <div class="onboarding-steps">
         ${onboarding.steps.map((step, index) => `
           <article class="${step.done ? "done" : ""}">

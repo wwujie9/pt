@@ -194,6 +194,7 @@ npm run db:migrations
 生产运营检查：
 
 ```powershell
+npm run demo:seed
 npm run monitoring:check
 npm run backup:lifecycle
 ```
@@ -202,10 +203,10 @@ npm run backup:lifecycle
 
 推荐用这条路径做首次客户演示：
 
-1. 打开 `http://127.0.0.1:4273/#/admin` 并登录管理员。
-2. 在“客户首次使用向导”创建 workspace，并确认页面自动切换租户。
-3. 邀请一名成员，复制一次性邀请 token 或接受链接。
-4. 添加一个授权 Torznab / RSS / internal 来源并启用。
+1. 运行 `npm run demo:seed` 准备演示 workspace、演示来源、邀请、同步日志、账单发票和监控状态。
+2. 打开 `http://127.0.0.1:4273/#/admin` 并登录管理员。
+3. 在 workspace 切换器选择 `Demo Customer Workspace`。
+4. 在“客户首次使用向导”查看完成态，或重新按步骤创建 workspace、邀请成员、添加来源。
 5. 点击“测试第一个来源”，确认来源健康状态写入。
 6. 选择一部媒体执行首次同步，查看同步日志和低置信度审核。
 7. 点击“运行监控检查”，展示备份、任务、来源健康和告警状态。

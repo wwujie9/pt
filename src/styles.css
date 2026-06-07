@@ -55,6 +55,41 @@ svg {
   backdrop-filter: blur(14px);
 }
 
+.toast-host {
+  position: fixed;
+  top: 82px;
+  right: 18px;
+  z-index: 50;
+  display: grid;
+  gap: 8px;
+  width: min(360px, calc(100vw - 28px));
+}
+
+.toast {
+  padding: 12px 14px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  box-shadow: var(--shadow);
+  font-size: 14px;
+  line-height: 1.5;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.toast.error {
+  border-color: #fecaca;
+  background: #fff1f2;
+  color: #991b1b;
+}
+
+.toast.leaving {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -778,6 +813,27 @@ pre {
   font-size: 22px;
 }
 
+.onboarding-complete {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  background: #f0fdfa;
+}
+
+.onboarding-complete strong {
+  color: #0f766e;
+}
+
+.onboarding-complete span {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .onboarding-steps {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -1107,6 +1163,11 @@ pre {
     padding: 14px;
   }
 
+  .toast-host {
+    top: 96px;
+    right: 14px;
+  }
+
   .workspace,
   .resource-board,
   .architecture,
@@ -1131,7 +1192,8 @@ pre {
   }
 
   .resource-toolbar,
-  .section-head {
+  .section-head,
+  .onboarding-complete {
     align-items: stretch;
     flex-direction: column;
   }
