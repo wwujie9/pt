@@ -112,6 +112,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
       - name: Check PostgreSQL migrations
         run: npm run db:migrations
         env:
@@ -153,6 +158,8 @@ jobs:
           CREDENTIAL_SECRET=ci-secret-at-least-32-characters \
           REDIS_URL=redis://127.0.0.1:6379 \
           PUBLIC_APP_URL=http://127.0.0.1:4273 \
+          STRIPE_WEBHOOK_SECRET=whsec_contract_test \
+          LEMON_WEBHOOK_SECRET=lemon_contract_test \
           node --no-warnings server/index.js &
           echo $! > server.pid
 
@@ -176,6 +183,15 @@ jobs:
         env:
           APP_URL: http://127.0.0.1:4273
 
+      - name: Payment sandbox contract
+        run: npm run test:payment-contract
+        env:
+          APP_URL: http://127.0.0.1:4273
+          STRIPE_WEBHOOK_SECRET: whsec_contract_test
+          LEMON_WEBHOOK_SECRET: lemon_contract_test
+          PAYMENT_CONTRACT_WORKSPACE_ID: default
+          PAYMENT_CONTRACT_PLAN: team
+
       - name: Worker run once
         run: npm run worker
         env:
@@ -185,6 +201,21 @@ jobs:
           REDIS_URL: redis://127.0.0.1:6379
           CREDENTIAL_SECRET: ci-secret-at-least-32-characters
           WORKER_RUN_ONCE: "1"
+
+      - name: PostgreSQL backup archive and restore SLA drill
+        run: |
+          createdb "postgres://pt:pt_password@127.0.0.1:5432/pt_restore"
+          BACKUP_FILE="$(
+            DATABASE_URL=postgres://pt:pt_password@127.0.0.1:5432/pt_resource_hub \
+            PG_BACKUP_DIR=storage/postgres-backups \
+            BACKUP_ARCHIVE=1 \
+            OBJECT_STORAGE_PROVIDER=file \
+            OBJECT_ARCHIVE_DIR=storage/object-archive \
+            npm run backup:postgres | tee backup-output.json | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>{const m=s.match(/\\{[\\s\\S]*\\}\\s*$/);process.stdout.write(JSON.parse(m[0]).file)})"
+          )"
+          RESTORE_DATABASE_URL=postgres://pt:pt_password@127.0.0.1:5432/pt_restore \
+          RESTORE_SLA_SECONDS=300 \
+          npm run backup:postgres:restore -- "$BACKUP_FILE"
 
       - name: Stop app
         if: always()

@@ -21,6 +21,9 @@
 - Stripe / Lemon Squeezy checkout 和签名 webhook。
 - Resend / SMTP relay / generic webhook 邮件 provider。
 - PostgreSQL `pg_dump` 备份和恢复演练脚本。
+- S3/R2/MinIO 对象存储备份归档脚本。
+- 恢复 SLA 演练指标：恢复耗时、表数量、SLA 是否达标。
+- 支付 sandbox webhook 合同测试。
 - Redis 多实例共享限流。
 - GitHub Actions CI/CD、GHCR 镜像发布、SSH 部署模板。
 - Trivy 镜像扫描、Dependabot。
@@ -190,14 +193,28 @@ RESTORE_DATABASE_URL=postgres://pt:password@postgres:5432/pt_restore npm run bac
 ```
 
 - 记录恢复耗时和数据完整性检查结果。
-- 后续接对象存储归档，例如 S3 / R2 / MinIO。
+- 接对象存储归档，例如 S3 / R2 / MinIO。
+
+对象存储归档：
+
+```bash
+BACKUP_FILE=storage/postgres-backups/xxx.dump \
+OBJECT_STORAGE_PROVIDER=s3 \
+S3_ENDPOINT=https://s3.example.com \
+S3_BUCKET=pt-resource-hub-backups \
+S3_ACCESS_KEY_ID=xxx \
+S3_SECRET_ACCESS_KEY=xxx \
+npm run backup:archive
+```
 
 验收：
 
 - 备份文件可生成。
+- 备份文件可归档到对象存储或本地 archive provider。
 - 恢复库能恢复出完整 schema。
 - 恢复后核心表数量、workspace 数、用户数、来源数符合预期。
 - 明确 RPO / RTO。
+- `RESTORE_SLA_SECONDS` 内完成恢复演练。
 
 ## 阶段 6：Redis 与多实例能力
 
@@ -332,6 +349,7 @@ P0：
 P1：
 
 - 支付 sandbox。
+- 支付 webhook 合同测试。
 - Redis 多实例压测。
 - branch protection / secret scanning。
 
@@ -339,9 +357,9 @@ P2：
 
 - RLS 线上观测指标和告警。
 - SBOM / 镜像签名。
-- 对象存储备份归档。
+- 对象存储生命周期策略、跨区域归档。
 - 支付发票、退款、webhook 重放。
 
 ## 下一轮开发建议
 
-建议下一轮专注对象存储备份归档、恢复 SLA 演练和支付 sandbox 合同测试。RLS 已经从“应用层纪律”升级为“数据库强约束”，后续重点应转向运营可靠性和商业化闭环。
+建议下一轮专注支付发票/退款/webhook 重放、备份对象存储生命周期策略和生产监控告警。RLS、对象归档、恢复 SLA 和支付合同测试已经具备基础闭环，后续重点应转向运营自动化和异常处理。

@@ -6,6 +6,7 @@ const databaseUrl = requiredEnv("DATABASE_URL");
 const backupDir = resolve(process.env.PG_BACKUP_DIR || "storage/postgres-backups");
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const file = resolve(backupDir, `${stamp}-pt-resource-hub.dump`);
+const startedAt = Date.now();
 
 mkdirSync(backupDir, { recursive: true });
 
@@ -20,7 +21,18 @@ if (result.status !== 0) {
   throw new Error("pg_dump 执行失败，请确认已安装 PostgreSQL client");
 }
 
-console.log(JSON.stringify({ ok: true, file }, null, 2));
+const payload = { ok: true, file, durationMs: Date.now() - startedAt };
+
+if (process.env.BACKUP_ARCHIVE === "1") {
+  const archive = spawnSync(process.execPath, ["scripts/archive-backup.mjs"], {
+    stdio: "inherit",
+    env: { ...process.env, BACKUP_FILE: file },
+  });
+  if (archive.status !== 0) throw new Error("备份归档失败");
+  payload.archived = true;
+}
+
+console.log(JSON.stringify(payload, null, 2));
 
 function requiredEnv(name) {
   const value = process.env[name];

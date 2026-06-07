@@ -43,6 +43,9 @@
 - Stripe / Lemon Squeezy checkout 与签名 webhook。
 - Resend / SMTP relay / webhook 邮件 provider。
 - PostgreSQL `pg_dump` 备份与恢复演练脚本。
+- S3/R2/MinIO 对象存储备份归档。
+- 恢复 SLA 演练指标。
+- 支付 sandbox webhook 合同测试。
 - Redis 多实例共享限流。
 - Trivy 镜像安全扫描与 Dependabot。
 

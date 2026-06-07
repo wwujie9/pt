@@ -183,6 +183,34 @@ DATABASE_URL=postgres://pt:password@postgres:5432/pt_resource_hub \
 npm run backup:postgres
 ```
 
+备份后归档到对象存储：
+
+```bash
+BACKUP_FILE=storage/postgres-backups/xxx.dump \
+OBJECT_STORAGE_PROVIDER=s3 \
+S3_ENDPOINT=https://s3.example.com \
+S3_BUCKET=pt-resource-hub-backups \
+S3_REGION=auto \
+S3_ACCESS_KEY_ID=xxx \
+S3_SECRET_ACCESS_KEY=xxx \
+S3_PREFIX=pt-resource-hub/postgres \
+npm run backup:archive
+```
+
+`S3_ENDPOINT` 支持 S3 / Cloudflare R2 / MinIO 等 S3-compatible endpoint。CI 和本地演练可使用 file provider：
+
+```bash
+OBJECT_STORAGE_PROVIDER=file \
+OBJECT_ARCHIVE_DIR=storage/object-archive \
+npm run backup:archive
+```
+
+也可以让备份脚本自动归档：
+
+```bash
+BACKUP_ARCHIVE=1 OBJECT_STORAGE_PROVIDER=s3 npm run backup:postgres
+```
+
 如果宿主机没有 `pg_dump`，脚本会自动使用 `POSTGRES_CONTAINER` 指定的容器，默认：
 
 ```env
@@ -197,6 +225,19 @@ npm run backup:postgres:restore -- storage/postgres-backups/xxx.dump
 ```
 
 恢复演练必须使用独立测试库，不要把 `RESTORE_DATABASE_URL` 指向生产库。
+
+恢复演练会输出：
+
+```json
+{
+  "durationMs": 1200,
+  "slaSeconds": 300,
+  "slaMet": true,
+  "tables": 16
+}
+```
+
+可通过 `RESTORE_SLA_SECONDS` 设置恢复 SLA，超时会让脚本失败。
 
 ## 6. 多实例 Redis 限流
 
@@ -251,3 +292,25 @@ Dependabot 已启用：
 6. 预发启用 RLS，跑 `test:rls`、smoke、SaaS E2E、worker。
 7. 生产启用 RLS。
 8. 对 branch protection、备份恢复和支付 sandbox 做上线前复核。
+
+## 9. 支付 sandbox 合同测试
+
+支付合同测试通过真实 HTTP webhook 入口验证签名、事件解析和套餐切换路径：
+
+```bash
+APP_URL=https://staging.example.com \
+STRIPE_WEBHOOK_SECRET=whsec_xxx \
+LEMON_WEBHOOK_SECRET=xxx \
+PAYMENT_CONTRACT_WORKSPACE_ID=default \
+PAYMENT_CONTRACT_PLAN=team \
+npm run test:payment-contract
+```
+
+覆盖：
+
+- Stripe 正确签名 webhook 被接受。
+- Stripe 错误签名 webhook 被拒绝。
+- Lemon Squeezy 正确签名 webhook 被接受。
+- Lemon Squeezy 错误签名 webhook 被拒绝。
+
+CI 会在 PostgreSQL + RLS + 低权限 runtime role 的环境下执行该合同测试。
