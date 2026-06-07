@@ -128,6 +128,7 @@ docker compose --env-file .env.production -f deploy/docker-compose.prod.yml up -
 
 完整风险清单、CI/CD 和发布步骤见 `docs/risk-and-deployment-plan.md`。
 高级生产能力启用步骤见 `docs/advanced-production-capabilities.md`。
+生产 SaaS 执行路线图见 `docs/execution-roadmap.md`。
 
 ## 烟测
 
