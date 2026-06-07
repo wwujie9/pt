@@ -65,7 +65,7 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' && vars.ENABLE_SSH_DEPLOY == '1' }}
     steps:
       - name: Deploy
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         env:
           APP_IMAGE: ${{ needs.publish.outputs.image }}
         with:
