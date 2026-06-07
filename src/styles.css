@@ -745,6 +745,119 @@ pre {
   color: #dc2626 !important;
 }
 
+.onboarding {
+  margin: 16px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.onboarding-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.onboarding-head h2,
+.onboarding-head p {
+  margin: 0;
+}
+
+.onboarding-head strong {
+  display: grid;
+  min-width: 68px;
+  min-height: 52px;
+  place-items: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: var(--blue);
+  font-size: 22px;
+}
+
+.onboarding-steps {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.onboarding-steps article {
+  min-height: 128px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.onboarding-steps article.done {
+  border-color: #99f6e4;
+  background: #f0fdfa;
+}
+
+.onboarding-steps span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.onboarding-steps article.done span {
+  background: var(--teal);
+  color: #ffffff;
+}
+
+.onboarding-steps strong {
+  display: block;
+  margin-top: 10px;
+}
+
+.onboarding-steps p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.onboarding-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.onboarding-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.onboarding-form.wide {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.onboarding-form strong {
+  grid-column: 1 / -1;
+}
+
+.onboarding-form p {
+  grid-column: 1 / -1;
+}
+
 .ops-dashboard {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -964,8 +1077,14 @@ pre {
   .stats,
   .media-grid,
   .layer-map,
-  .ops-dashboard {
+  .ops-dashboard,
+  .onboarding-steps {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .onboarding-actions,
+  .onboarding-form.wide {
+    grid-template-columns: 1fr;
   }
 
   .flow {
@@ -1003,7 +1122,11 @@ pre {
   .stats,
   .media-grid,
   .layer-map,
-  .ops-dashboard {
+  .ops-dashboard,
+  .onboarding-steps,
+  .onboarding-actions,
+  .onboarding-form,
+  .onboarding-form.wide {
     grid-template-columns: 1fr;
   }
 

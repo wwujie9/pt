@@ -104,7 +104,7 @@ async function renderRoute() {
 
   if (hash === "#/admin") {
     view.innerHTML = `<section class="loading">正在读取来源状态...</section>`;
-    const [adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks] = await Promise.all([
+    const [adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems] = await Promise.all([
       fetchSources().catch(() => []),
       fetchSyncLogs().catch(() => []),
       fetchReviewResources().catch(() => []),
@@ -120,8 +120,9 @@ async function renderRoute() {
       fetchInvitations().catch(() => []),
       fetchDownloadClients().catch(() => []),
       fetchTasks().catch(() => []),
+      fetchMediaList({ keyword: "", filters: { type: "all", genre: "all" } }).catch(() => []),
     ]);
-    view.innerHTML = renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks });
+    view.innerHTML = renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems });
     bindAdminEvents();
     return;
   }
@@ -191,6 +192,23 @@ function bindAdminEvents() {
     }
   });
 
+  document.querySelector("#onboardingWorkspaceForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      const workspace = await createWorkspace({
+        name: data.get("name"),
+        plan: data.get("plan"),
+      });
+      localStorage.setItem("workspaceId", workspace.id);
+      form.reset();
+      await renderRoute();
+    } catch (error) {
+      showAdminError(error);
+    }
+  });
+
   document.querySelector("#userForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -223,6 +241,26 @@ function bindAdminEvents() {
       });
       document.querySelector("#inviteOutput").textContent = `邀请已创建，临时密码：${invite.inviteToken}`;
       form.reset();
+    } catch (error) {
+      showAdminError(error);
+    }
+  });
+
+  document.querySelector("#onboardingInviteForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      const invite = await inviteUser({
+        email: data.get("email"),
+        name: data.get("name"),
+        role: data.get("role"),
+        workspaceId: data.get("workspaceId") || localStorage.getItem("workspaceId") || "default",
+      });
+      const output = document.querySelector("#onboardingInviteOutput");
+      if (output) output.textContent = `邀请已创建，接受链接 token：${invite.inviteToken}`;
+      form.reset();
+      await renderRoute();
     } catch (error) {
       showAdminError(error);
     }
@@ -298,6 +336,15 @@ function bindAdminEvents() {
   });
 
   document.querySelector("#monitoringRunButton")?.addEventListener("click", async () => {
+    try {
+      await runMonitoring();
+      await renderRoute();
+    } catch (error) {
+      showAdminError(error);
+    }
+  });
+
+  document.querySelector("#onboardingMonitoringButton")?.addEventListener("click", async () => {
     try {
       await runMonitoring();
       await renderRoute();
@@ -404,6 +451,59 @@ function bindAdminEvents() {
     await saveSource(source);
     form.reset();
     await renderRoute();
+  });
+
+  document.querySelector("#onboardingSourceForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    try {
+      const source = {
+        id: data.get("id"),
+        name: data.get("name"),
+        type: data.get("type"),
+        enabled: data.get("enabled") === "on",
+        weight: data.get("weight"),
+        baseUrl: data.get("baseUrl"),
+        apiKey: data.get("apiKey"),
+        url: data.get("url"),
+      };
+      await saveSource(source);
+      form.reset();
+      await renderRoute();
+    } catch (error) {
+      showAdminError(error);
+    }
+  });
+
+  document.querySelectorAll("[data-onboarding-test-source]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      button.textContent = "测试中";
+      try {
+        const result = await testSource(button.dataset.onboardingTestSource);
+        button.textContent = result.ok ? "测试通过" : "测试失败";
+        await renderRoute();
+      } catch (error) {
+        button.textContent = "测试失败";
+        showAdminError(error);
+      } finally {
+        setTimeout(() => {
+          if (button.isConnected) button.disabled = false;
+        }, 1200);
+      }
+    });
+  });
+
+  document.querySelector("#onboardingSyncForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    try {
+      await syncMediaResources(data.get("mediaId"));
+      await renderRoute();
+    } catch (error) {
+      showAdminError(error);
+    }
   });
 
   document.querySelectorAll("[data-edit-source]").forEach((button) => {

@@ -191,7 +191,8 @@ export function renderArchitecture() {
   `;
 }
 
-export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks }) {
+export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, auditLogs, workspaces, billing, plans, billingEvents, billingInvoices, monitoring, invitations, downloadClients, tasks, mediaItems }) {
+  const onboarding = onboardingState({ adapters, syncLogs, workspaces, invitations, monitoring });
   return `
     <section class="admin">
       <div class="section-head">
@@ -228,6 +229,7 @@ export function renderAdmin({ adapters, syncLogs, reviewResources, me, users, au
         <input name="newPassword" type="password" placeholder="新密码，至少 8 位" />
         <button class="primary-button" type="submit">修改</button>
       </form>
+      ${renderOnboarding({ onboarding, workspaces, adapters, mediaItems, monitoring })}
       <section class="ops-dashboard">
         <article>
           <strong class="${monitoring?.ok === false ? "danger-text" : "success-text"}">${monitoring?.ok === false ? "告警" : "健康"}</strong>
@@ -630,6 +632,116 @@ function permissionRow(role, desc) {
       <strong>${role}</strong>
       <span>${desc}</span>
     </article>
+  `;
+}
+
+function onboardingState({ adapters, syncLogs, workspaces, invitations, monitoring }) {
+  const enabledSource = (adapters || []).find((source) => source.enabled);
+  const testedSource = (adapters || []).find((source) => source.health);
+  const firstSync = (syncLogs || []).find((log) => log.type === "media-resource-sync");
+  const steps = [
+    { key: "workspace", done: (workspaces || []).length > 0, title: "创建 workspace", desc: "为客户建立独立租户空间，并自动切换到该 workspace。" },
+    { key: "invite", done: (invitations || []).length > 0, title: "邀请成员", desc: "发送一次性邀请 token，验证团队协作和 RBAC 流程。" },
+    { key: "source", done: Boolean(enabledSource), title: "添加来源", desc: "接入 Torznab、RSS 或 internal 授权来源，并启用同步。" },
+    { key: "test", done: Boolean(testedSource), title: "测试来源", desc: "确认来源连通性，健康结果会进入监控和来源状态。" },
+    { key: "sync", done: Boolean(firstSync), title: "首次同步", desc: "选一部媒体触发同步，让客户看到资源进入审核和排序链路。" },
+    { key: "monitoring", done: Boolean(monitoring), title: "查看监控", desc: "展示备份、任务、来源健康和告警阈值，完成生产运营闭环。" },
+  ];
+  return {
+    enabledSource,
+    testedSource,
+    firstSync,
+    completed: steps.filter((step) => step.done).length,
+    steps,
+  };
+}
+
+function renderOnboarding({ onboarding, workspaces, adapters, mediaItems, monitoring }) {
+  const firstSource = (adapters || [])[0];
+  const selectedWorkspace = workspaces?.[0]?.id || "default";
+  return `
+    <section class="onboarding">
+      <div class="onboarding-head">
+        <div>
+          <p class="eyebrow">客户首次使用向导</p>
+          <h2>从 0 到 1 跑通一个 SaaS 租户</h2>
+        </div>
+        <strong>${onboarding.completed}/${onboarding.steps.length}</strong>
+      </div>
+      <div class="onboarding-steps">
+        ${onboarding.steps.map((step, index) => `
+          <article class="${step.done ? "done" : ""}">
+            <span>${step.done ? "完成" : String(index + 1).padStart(2, "0")}</span>
+            <strong>${step.title}</strong>
+            <p>${step.desc}</p>
+          </article>
+        `).join("")}
+      </div>
+      <div class="onboarding-actions">
+        <form id="onboardingWorkspaceForm" class="onboarding-form">
+          <strong>1. 创建 workspace</strong>
+          <input name="name" placeholder="客户公司或团队名称" required />
+          <select name="plan">
+            <option value="starter">starter</option>
+            <option value="team">team</option>
+            <option value="business">business</option>
+          </select>
+          <button class="primary-button" type="submit">创建并切换</button>
+        </form>
+        <form id="onboardingInviteForm" class="onboarding-form">
+          <strong>2. 邀请成员</strong>
+          <input name="email" type="email" placeholder="member@example.com" required />
+          <input name="name" placeholder="成员姓名" />
+          <select name="workspaceId">
+            ${(workspaces || []).map((workspace) => option(workspace.id, workspace.name, selectedWorkspace)).join("") || option("default", "Default Workspace", "default")}
+          </select>
+          <select name="role">
+            <option value="operator">operator</option>
+            <option value="viewer">viewer</option>
+            <option value="admin">admin</option>
+          </select>
+          <button class="primary-button" type="submit">发送邀请</button>
+          <p id="onboardingInviteOutput" class="muted"></p>
+        </form>
+        <form id="onboardingSourceForm" class="onboarding-form wide">
+          <strong>3. 添加来源</strong>
+          <input name="id" placeholder="prowlarr-main" required />
+          <input name="name" placeholder="Prowlarr Main" required />
+          <select name="type">
+            <option value="torznab">torznab</option>
+            <option value="rss">rss</option>
+            <option value="internal">internal</option>
+          </select>
+          <input name="baseUrl" placeholder="Torznab / Prowlarr / Jackett API URL" />
+          <input name="url" placeholder="RSS URL" />
+          <input name="apiKey" placeholder="API Key" />
+          <input name="weight" type="number" step="0.1" value="1" />
+          <label class="check-row"><input name="enabled" type="checkbox" checked /><span>启用</span></label>
+          <button class="primary-button" type="submit">保存来源</button>
+        </form>
+        <div class="onboarding-form">
+          <strong>4. 测试来源</strong>
+          <select disabled>
+            ${(adapters || []).map((source) => option(source.id, source.name, firstSource?.id || "")).join("") || option("", "暂无来源", "")}
+          </select>
+          <button class="primary-button" type="button" data-onboarding-test-source="${escapeHtml(firstSource?.id || "")}" ${firstSource ? "" : "disabled"}>测试第一个来源</button>
+          <p class="muted">${firstSource?.health ? `最近状态：${firstSource.health.ok ? "可用" : "失败"}` : "测试后会写入来源健康状态。"}</p>
+        </div>
+        <form id="onboardingSyncForm" class="onboarding-form">
+          <strong>5. 首次同步</strong>
+          <select name="mediaId">
+            ${(mediaItems || []).slice(0, 20).map((item) => option(item.id, item.titleZh || item.titleEn || item.id, "")).join("")}
+          </select>
+          <button class="primary-button" type="submit" ${(mediaItems || []).length ? "" : "disabled"}>同步选中媒体</button>
+          <p class="muted">同步会触发来源聚合、排序和低置信度审核。</p>
+        </form>
+        <div class="onboarding-form">
+          <strong>6. 查看监控</strong>
+          <button id="onboardingMonitoringButton" class="primary-button" type="button">运行监控检查</button>
+          <p class="muted">${monitoring ? `当前状态：${monitoring.ok ? "健康" : "有告警"}` : "需要平台管理员权限。"}</p>
+        </div>
+      </div>
+    </section>
   `;
 }
 
